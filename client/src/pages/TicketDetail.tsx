@@ -1,21 +1,19 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import { Layout } from "@/components/Layout";
-import { TICKETS, COMMENTS, VISITORS, COMPANIES, USERS, TicketStatus, TicketQueue, TicketSeverity, User as UserType } from "@/lib/mockData";
+import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
 import { 
   Send, 
   Lock, 
   User, 
   Building2, 
-  MapPin, 
   Phone, 
   Mail, 
   AlertTriangle,
-  ChevronDown,
   Paperclip,
-  CheckCircle2,
-  Clock
+  Loader2,
+  ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,63 +27,181 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+
+interface TicketDetailData {
+  id: string;
+  public_id: string;
+  title: string;
+  description: string;
+  status: string;
+  queue: string;
+  severity: string;
+  assignee_ids: string[];
+  visitor_id: string | null;
+  company_id: string | null;
+  source_chat_id: number | null;
+  created_at: string;
+  last_activity_at: string;
+  visitor: {
+    id: string;
+    name: string | null;
+    telegram_user_id: number | null;
+    persona_type: string | null;
+    email: string | null;
+    whatsapp: string | null;
+    uf: string | null;
+    city: string | null;
+  } | null;
+  company: {
+    id: string;
+    trade_name: string;
+    legal_name: string;
+    cnpj: string;
+    status: string;
+    city: string | null;
+    uf: string | null;
+    phone: string | null;
+  } | null;
+  other_tickets: {
+    id: string;
+    public_id: string;
+    title: string;
+    status: string;
+  }[];
+}
+
+interface CommentData {
+  id: string;
+  ticket_id: string;
+  author_type: string;
+  author_ref: string | null;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+}
 
 export default function TicketDetail() {
   const { id } = useParams();
+  const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'reply' | 'note'>('reply');
   const [replyText, setReplyText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  // Mock fetching data
-  const ticket = TICKETS.find(t => t.id === id);
-  const comments = COMMENTS.filter(c => c.ticket_id === id).sort((a, b) => 
-    new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  
-  if (!ticket) return <Layout><div className="p-10">Ticket not found</div></Layout>;
+  const { data: ticket, isLoading: ticketLoading } = useQuery<TicketDetailData>({
+    queryKey: [`/api/tickets/${id}`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!id,
+  });
 
-  const visitor = VISITORS.find(v => v.id === ticket.visitor_id);
-  const company = visitor?.company_id ? COMPANIES.find(c => c.id === visitor.company_id) : null;
-  const assignees = ticket.assignee_ids.map(uid => USERS.find(u => u.id === uid)).filter((u): u is UserType => !!u);
+  const { data: comments = [], isLoading: commentsLoading } = useQuery<CommentData[]>({
+    queryKey: [`/api/tickets/${id}/comments`],
+    queryFn: getQueryFn({ on401: "throw" }),
+    enabled: !!id,
+    refetchInterval: 10000,
+  });
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const { data: users = [] } = useQuery<{ id: string; name: string; email: string }[]>({
+    queryKey: ["/api/users"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("PATCH", `/api/tickets/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tickets/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+    },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async ({ body, is_internal }: { body: string; is_internal: boolean }) => {
+      const endpoint = is_internal ? `/api/tickets/${id}/comments` : `/api/tickets/${id}/reply`;
+      await apiRequest("POST", endpoint, { body, is_internal });
+    },
+    onSuccess: () => {
+      setReplyText("");
+      queryClient.invalidateQueries({ queryKey: [`/api/tickets/${id}/comments`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/tickets/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
+      toast({ title: activeTab === 'reply' ? "Reply sent" : "Note saved" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [comments]);
+
+  if (ticketLoading || !ticket) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
+
+  const visitor = ticket.visitor;
+  const company = ticket.company;
+  const assignees = ticket.assignee_ids.map(uid => users.find(u => u.id === uid)).filter(Boolean) as { id: string; name: string }[];
+
+  const getUserName = (authorRef: string | null, authorType: string) => {
+    if (authorType === 'visitor') return visitor?.name || 'Visitor';
+    if (authorType === 'system') return 'System';
+    if (authorRef) {
+      const u = users.find(u => u.id === authorRef);
+      return u?.name || 'Agent';
+    }
+    return 'Unknown';
+  };
+
+  const handleSend = () => {
+    if (!replyText.trim()) return;
+    commentMutation.mutate({
+      body: replyText.trim(),
+      is_internal: activeTab === 'note',
+    });
+  };
 
   return (
     <Layout>
       <div className="h-full flex flex-col md:flex-row bg-background">
         
-        {/* Main Chat Area */}
         <div className="flex-1 flex flex-col min-w-0 border-r border-border/50">
-          {/* Header */}
           <div className="h-16 border-b border-border/50 flex items-center justify-between px-6 bg-background shrink-0">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-sm font-bold text-muted-foreground">{ticket.public_id}</span>
-                {ticket.severity === 'S1' && (
-                  <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">CRITICAL</Badge>
-                )}
+            <div className="min-w-0 flex items-center gap-4">
+              <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+              </Link>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-mono text-sm font-bold text-muted-foreground">{ticket.public_id}</span>
+                  {ticket.severity === 'S1' && (
+                    <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">CRITICAL</Badge>
+                  )}
+                </div>
+                <h2 className="font-semibold text-lg truncate leading-none">{ticket.title}</h2>
               </div>
-              <h2 className="font-semibold text-lg truncate leading-none">{ticket.title}</h2>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className={cn(
-                "uppercase tracking-wider font-mono text-[10px]",
-                ticket.status === 'done' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-muted text-muted-foreground"
-              )}>
-                {ticket.status.replace('_', ' ')}
-              </Badge>
-            </div>
+            <Badge variant="outline" className={cn(
+              "uppercase tracking-wider font-mono text-[10px]",
+              ticket.status === 'done' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-muted text-muted-foreground"
+            )}>
+              {ticket.status.replace('_', ' ')}
+            </Badge>
           </div>
 
-          {/* Messages Scroll Area */}
           <div className="flex-1 overflow-y-auto p-6 bg-muted/5 dark:bg-background/50 space-y-6">
-             {/* Ticket Description as first message */}
              <div className="flex gap-4 max-w-3xl">
                 <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
                   <User className="w-4 h-4 text-muted-foreground" />
@@ -101,38 +217,37 @@ export default function TicketDetail() {
                 </div>
               </div>
 
-              {/* Thread */}
               {comments.map((comment) => {
                 const isInternal = comment.is_internal;
-                const author = comment.author_type === 'visitor' ? visitor : USERS.find(u => u.id === comment.author_id);
+                const isAdmin = comment.author_type === 'admin';
+                const authorName = getUserName(comment.author_ref, comment.author_type);
                 
                 return (
                   <div key={comment.id} className={cn(
                     "flex gap-4 max-w-3xl",
-                    isInternal ? "ml-auto flex-row-reverse" : ""
-                  )}>
+                    isAdmin ? "ml-auto flex-row-reverse" : ""
+                  )} data-testid={`comment-${comment.id}`}>
                     <div className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center shrink-0 border",
-                      isInternal ? "bg-amber-100 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800" : "bg-slate-200 dark:bg-slate-800 border-transparent"
+                      isInternal ? "bg-amber-100 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800" : 
+                      isAdmin ? "bg-primary/10 border-primary/20" : "bg-slate-200 dark:bg-slate-800 border-transparent"
                     )}>
-                      {isInternal ? <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" /> : <User className="w-4 h-4 text-muted-foreground" />}
+                      {isInternal ? <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" /> : 
+                       <span className="text-[10px] font-bold text-primary">{authorName.charAt(0)}</span>}
                     </div>
                     
-                    <div className={cn(
-                      "flex flex-col",
-                      isInternal ? "items-end" : "items-start"
-                    )}>
+                    <div className={cn("flex flex-col", isAdmin ? "items-end" : "items-start")}>
                       <div className="flex items-baseline gap-2 mb-1">
-                        <span className="font-medium text-sm">{author?.name || 'Unknown'}</span>
+                        <span className="font-medium text-sm">{authorName}</span>
                         <span className="text-xs text-muted-foreground">{format(new Date(comment.created_at), "MMM d, HH:mm")}</span>
-                        {isInternal && <span className="text-[10px] font-mono text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">INTERNAL NOTE</span>}
+                        {isInternal && <span className="text-[10px] font-mono text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">INTERNAL</span>}
                       </div>
                       
                       <div className={cn(
                         "p-3 rounded-lg text-sm leading-relaxed whitespace-pre-wrap shadow-sm max-w-[500px]",
                         isInternal 
                           ? "bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-100 rounded-tr-none" 
-                          : comment.author_type === 'admin' 
+                          : isAdmin 
                             ? "bg-primary text-primary-foreground rounded-tr-none"
                             : "bg-card border border-border rounded-tl-none"
                       )}>
@@ -145,74 +260,74 @@ export default function TicketDetail() {
               <div ref={messagesEndRef} />
           </div>
 
-          {/* Composer */}
-          <div className="p-4 bg-background border-t border-border shrink-0">
-            <div className="max-w-4xl mx-auto border rounded-lg shadow-sm bg-card overflow-hidden focus-within:ring-1 focus-within:ring-primary transition-all">
-              <div className="flex border-b bg-muted/30">
-                <button
-                  onClick={() => setActiveTab('reply')}
-                  className={cn(
-                    "px-4 py-2 text-xs font-medium border-r transition-colors flex items-center gap-2",
-                    activeTab === 'reply' ? "bg-card text-foreground border-b-transparent" : "text-muted-foreground hover:bg-muted/50"
-                  )}
-                >
-                  <Send className="w-3 h-3" /> Reply to Visitor
-                </button>
-                <button
-                  onClick={() => setActiveTab('note')}
-                  className={cn(
-                    "px-4 py-2 text-xs font-medium border-r transition-colors flex items-center gap-2",
-                    activeTab === 'note' ? "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-b-transparent" : "text-muted-foreground hover:bg-muted/50"
-                  )}
-                >
-                  <Lock className="w-3 h-3" /> Internal Note
-                </button>
-              </div>
-              <div className={cn(
-                "p-3",
-                activeTab === 'note' && "bg-amber-50/50 dark:bg-amber-950/10"
-              )}>
-                <Textarea 
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={activeTab === 'reply' ? "Write a reply..." : "Add a private note for the team..."}
-                  className="min-h-[100px] border-none focus-visible:ring-0 resize-none bg-transparent p-0 text-sm"
-                />
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-dashed border-border/50">
-                   <div className="flex gap-2">
-                     <button className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted">
-                        <Paperclip className="w-4 h-4" />
-                     </button>
-                   </div>
-                   <Button 
-                    size="sm" 
+          {authUser?.role !== 'viewer' && (
+            <div className="p-4 bg-background border-t border-border shrink-0">
+              <div className="max-w-4xl mx-auto border rounded-lg shadow-sm bg-card overflow-hidden focus-within:ring-1 focus-within:ring-primary transition-all">
+                <div className="flex border-b bg-muted/30">
+                  <button
+                    onClick={() => setActiveTab('reply')}
                     className={cn(
-                      "gap-2",
-                      activeTab === 'note' ? "bg-amber-600 hover:bg-amber-700 text-white" : ""
+                      "px-4 py-2 text-xs font-medium border-r transition-colors flex items-center gap-2",
+                      activeTab === 'reply' ? "bg-card text-foreground border-b-transparent" : "text-muted-foreground hover:bg-muted/50"
                     )}
-                   >
-                     {activeTab === 'reply' ? "Send Reply" : "Save Note"} 
-                     {activeTab === 'reply' && <Send className="w-3 h-3" />}
-                   </Button>
+                    data-testid="tab-reply"
+                  >
+                    <Send className="w-3 h-3" /> Reply to Visitor
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('note')}
+                    className={cn(
+                      "px-4 py-2 text-xs font-medium border-r transition-colors flex items-center gap-2",
+                      activeTab === 'note' ? "bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-b-transparent" : "text-muted-foreground hover:bg-muted/50"
+                    )}
+                    data-testid="tab-note"
+                  >
+                    <Lock className="w-3 h-3" /> Internal Note
+                  </button>
+                </div>
+                <div className={cn("p-3", activeTab === 'note' && "bg-amber-50/50 dark:bg-amber-950/10")}>
+                  <Textarea 
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={activeTab === 'reply' ? "Write a reply..." : "Add a private note for the team..."}
+                    className="min-h-[100px] border-none focus-visible:ring-0 resize-none bg-transparent p-0 text-sm"
+                    data-testid="textarea-composer"
+                  />
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-dashed border-border/50">
+                     <div />
+                     <Button 
+                      size="sm" 
+                      disabled={commentMutation.isPending || !replyText.trim()}
+                      onClick={handleSend}
+                      className={cn("gap-2", activeTab === 'note' ? "bg-amber-600 hover:bg-amber-700 text-white" : "")}
+                      data-testid="button-send"
+                     >
+                       {commentMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                       {activeTab === 'reply' ? "Send Reply" : "Save Note"} 
+                       {activeTab === 'reply' && !commentMutation.isPending && <Send className="w-3 h-3" />}
+                     </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Sidebar Info */}
         <div className="w-80 border-l border-border bg-muted/10 shrink-0 overflow-y-auto">
           <div className="p-6 space-y-8">
             
-            {/* Ticket Properties */}
             <div className="space-y-4">
               <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Properties</h3>
               
               <div className="space-y-3">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Status</label>
-                  <Select defaultValue={ticket.status}>
-                    <SelectTrigger className="h-8 text-xs bg-background">
+                  <Select 
+                    value={ticket.status} 
+                    onValueChange={(v) => updateMutation.mutate({ status: v })}
+                    disabled={authUser?.role === 'viewer'}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background" data-testid="select-status">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -220,6 +335,8 @@ export default function TicketDetail() {
                       <SelectItem value="needs_info">Needs Info</SelectItem>
                       <SelectItem value="assigned">Assigned</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="waiting">Waiting</SelectItem>
+                      <SelectItem value="review">Review</SelectItem>
                       <SelectItem value="done">Done</SelectItem>
                     </SelectContent>
                   </Select>
@@ -227,8 +344,12 @@ export default function TicketDetail() {
 
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Queue</label>
-                  <Select defaultValue={ticket.queue}>
-                    <SelectTrigger className="h-8 text-xs bg-background">
+                  <Select 
+                    value={ticket.queue}
+                    onValueChange={(v) => updateMutation.mutate({ queue: v })}
+                    disabled={authUser?.role === 'viewer'}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background" data-testid="select-queue">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -241,8 +362,12 @@ export default function TicketDetail() {
 
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Severity</label>
-                  <Select defaultValue={ticket.severity}>
-                    <SelectTrigger className="h-8 text-xs bg-background">
+                  <Select 
+                    value={ticket.severity}
+                    onValueChange={(v) => updateMutation.mutate({ severity: v })}
+                    disabled={authUser?.role === 'viewer'}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-background" data-testid="select-severity">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -258,36 +383,49 @@ export default function TicketDetail() {
                   <div className="flex flex-wrap gap-2 mb-2">
                     {assignees.map(u => (
                        <Badge key={u.id} variant="secondary" className="gap-1 pl-1 pr-2 py-0.5 font-normal">
-                         <img src={u.avatar} className="w-4 h-4 rounded-full" />
+                         <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-[8px] text-primary font-bold">{u.name.charAt(0)}</div>
                          {u.name}
                        </Badge>
                     ))}
-                    <button className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
-                      <span className="text-xs">+</span>
-                    </button>
                   </div>
+                  <Select onValueChange={(userId) => {
+                    const current = ticket.assignee_ids;
+                    if (!current.includes(userId)) {
+                      updateMutation.mutate({ assignee_ids: [...current, userId] });
+                    }
+                  }}>
+                    <SelectTrigger className="h-7 text-xs bg-background" data-testid="select-assignee">
+                      <SelectValue placeholder="Add assignee..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.filter(u => !ticket.assignee_ids.includes(u.id)).map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
 
             <Separator />
 
-            {/* Visitor Info */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                Visitor
-                <Badge variant="outline" className="text-[10px] h-4 py-0 px-1">{visitor?.persona_type}</Badge>
-              </h3>
-              
-              {visitor && (
+            {visitor && (
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                  Visitor
+                  {visitor.persona_type && <Badge variant="outline" className="text-[10px] h-4 py-0 px-1">{visitor.persona_type}</Badge>}
+                </h3>
+                
                 <div className="bg-card rounded-md border p-3 space-y-3 text-sm shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                      {visitor.name.charAt(0)}
+                      {(visitor.name || '?').charAt(0)}
                     </div>
                     <div>
-                      <p className="font-semibold leading-tight">{visitor.name}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{visitor.telegram_handle}</p>
+                      <p className="font-semibold leading-tight">{visitor.name || 'Unknown'}</p>
+                      {visitor.telegram_user_id && (
+                        <p className="text-xs text-muted-foreground font-mono">TG: {visitor.telegram_user_id}</p>
+                      )}
                     </div>
                   </div>
                   
@@ -304,12 +442,16 @@ export default function TicketDetail() {
                         <span className="text-xs">{visitor.whatsapp}</span>
                       </div>
                     )}
+                    {visitor.city && visitor.uf && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span className="text-xs">{visitor.city}, {visitor.uf}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Company Info (if B2B) */}
             {company && (
               <>
                 <Separator />
@@ -344,34 +486,43 @@ export default function TicketDetail() {
                         <span className="text-muted-foreground">CNPJ</span>
                         <span className="font-mono select-all">{company.cnpj}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Location</span>
-                        <span className="">{company.city}, {company.uf}</span>
-                      </div>
+                      {company.city && company.uf && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Location</span>
+                          <span>{company.city}, {company.uf}</span>
+                        </div>
+                      )}
+                      {company.phone && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Phone</span>
+                          <span className="font-mono">{company.phone}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </>
             )}
 
-            {/* Other Tickets */}
             <Separator />
              <div className="space-y-3">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">History</h3>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Other Tickets</h3>
               <div className="space-y-2">
-                {TICKETS.filter(t => t.visitor_id === visitor?.id && t.id !== ticket.id).map(otherTicket => (
-                   <div key={otherTicket.id} className="flex items-center justify-between p-2 rounded border border-transparent hover:border-border hover:bg-card transition-colors cursor-pointer text-xs">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", 
-                          otherTicket.status === 'done' ? "bg-emerald-500" : "bg-blue-500"
-                        )} />
-                        <span className="truncate">{otherTicket.title}</span>
-                      </div>
-                      <span className="font-mono text-[10px] text-muted-foreground">{otherTicket.public_id}</span>
-                   </div>
+                {ticket.other_tickets.map(otherTicket => (
+                   <Link key={otherTicket.id} href={`/ticket/${otherTicket.id}`}>
+                     <div className="flex items-center justify-between p-2 rounded border border-transparent hover:border-border hover:bg-card transition-colors cursor-pointer text-xs">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", 
+                            otherTicket.status === 'done' ? "bg-emerald-500" : "bg-blue-500"
+                          )} />
+                          <span className="truncate">{otherTicket.title}</span>
+                        </div>
+                        <span className="font-mono text-[10px] text-muted-foreground">{otherTicket.public_id}</span>
+                     </div>
+                   </Link>
                 ))}
-                {TICKETS.filter(t => t.visitor_id === visitor?.id && t.id !== ticket.id).length === 0 && (
-                  <p className="text-xs text-muted-foreground italic">No other tickets.</p>
+                {ticket.other_tickets.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">No other tickets from this visitor.</p>
                 )}
               </div>
             </div>

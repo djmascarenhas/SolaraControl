@@ -1,16 +1,11 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Layout } from "@/components/Layout";
-import { TICKETS, Ticket, TicketStatus, TicketSeverity, USERS } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { 
   Filter, 
   MoreHorizontal, 
-  AlertCircle, 
-  CheckCircle2, 
-  Clock, 
-  User as UserIcon,
-  Archive
+  Loader2
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +15,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
+
+type TicketStatus = 'inbox' | 'needs_info' | 'assigned' | 'in_progress' | 'waiting' | 'review' | 'done';
+type TicketSeverity = 'S1' | 'S2' | 'S3';
+
+interface TicketData {
+  id: string;
+  public_id: string;
+  title: string;
+  status: string;
+  queue: string;
+  severity: string;
+  assignee_ids: string[];
+  last_activity_at: string;
+  created_at: string;
+}
 
 const STATUS_COLUMNS: { id: TicketStatus; label: string }[] = [
   { id: 'inbox', label: 'Inbox' },
@@ -31,35 +43,58 @@ const STATUS_COLUMNS: { id: TicketStatus; label: string }[] = [
   { id: 'done', label: 'Done' },
 ];
 
-const SEVERITY_COLORS: Record<TicketSeverity, string> = {
+const SEVERITY_COLORS: Record<string, string> = {
   S1: "bg-destructive/15 text-destructive border-destructive/20",
   S2: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/20",
   S3: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
 };
 
 export default function Kanban() {
-  const [tickets, setTickets] = useState<Ticket[]>(TICKETS);
   const [filterQueue, setFilterQueue] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const filteredTickets = tickets.filter(t => {
-    if (filterQueue && t.queue !== filterQueue) return false;
-    if (filterSeverity && t.severity !== filterSeverity) return false;
-    return true;
+  const params = new URLSearchParams();
+  if (filterQueue) params.set("queue", filterQueue);
+  if (filterSeverity) params.set("severity", filterSeverity);
+
+  const { data: tickets = [], isLoading } = useQuery<TicketData[]>({
+    queryKey: ["/api/tickets" + (params.toString() ? `?${params}` : "")],
+    queryFn: getQueryFn({ on401: "throw" }),
+    refetchInterval: 15000,
+  });
+
+  const { data: users = [] } = useQuery<{ id: string; name: string; email: string }[]>({
+    queryKey: ["/api/users"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      await apiRequest("PATCH", `/api/tickets/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+    },
   });
 
   const getTicketsByStatus = (status: TicketStatus) => {
-    return filteredTickets.filter(t => t.status === status);
+    return tickets.filter(t => t.status === status);
   };
 
-  const handleStatusChange = (ticketId: string, newStatus: TicketStatus) => {
-    setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: newStatus } : t));
-  };
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="h-full flex flex-col">
-        {/* Filters Toolbar */}
         <div className="px-6 py-3 border-b flex items-center gap-4 bg-background/50 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
             <Filter className="w-4 h-4" />
@@ -67,7 +102,7 @@ export default function Kanban() {
           </div>
           
           <DropdownMenu>
-            <DropdownMenuTrigger className="px-3 py-1.5 text-xs font-medium border rounded-md hover:bg-muted/50 transition-colors flex items-center gap-2">
+            <DropdownMenuTrigger className="px-3 py-1.5 text-xs font-medium border rounded-md hover:bg-muted/50 transition-colors flex items-center gap-2" data-testid="filter-queue">
               Queue: {filterQueue ? filterQueue : 'All'}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
@@ -79,7 +114,7 @@ export default function Kanban() {
           </DropdownMenu>
 
           <DropdownMenu>
-            <DropdownMenuTrigger className="px-3 py-1.5 text-xs font-medium border rounded-md hover:bg-muted/50 transition-colors flex items-center gap-2">
+            <DropdownMenuTrigger className="px-3 py-1.5 text-xs font-medium border rounded-md hover:bg-muted/50 transition-colors flex items-center gap-2" data-testid="filter-severity">
               Severity: {filterSeverity ? filterSeverity : 'All'}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
@@ -91,11 +126,10 @@ export default function Kanban() {
           </DropdownMenu>
 
           <div className="ml-auto text-xs text-muted-foreground">
-            {filteredTickets.length} tickets shown
+            {tickets.length} tickets
           </div>
         </div>
 
-        {/* Board */}
         <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
           <div className="flex h-full gap-4 min-w-max">
             {STATUS_COLUMNS.map(column => {
@@ -110,22 +144,14 @@ export default function Kanban() {
                         {columnTickets.length}
                       </span>
                     </h3>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="text-muted-foreground hover:text-foreground">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem>Mark all done</DropdownMenuItem>
-                        <DropdownMenuItem>Clear column</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
                     {columnTickets.map(ticket => (
                       <div 
                         key={ticket.id} 
                         className="group relative bg-card border rounded-md p-3 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer"
+                        data-testid={`card-ticket-${ticket.public_id}`}
                       >
                         <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                           <DropdownMenu>
@@ -133,8 +159,14 @@ export default function Kanban() {
                               <MoreHorizontal className="w-3 h-3" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleStatusChange(ticket.id, 'done')}>Move to Done</DropdownMenuItem>
-                              <DropdownMenuItem>Assign to me</DropdownMenuItem>
+                              {STATUS_COLUMNS.filter(s => s.id !== ticket.status).map(s => (
+                                <DropdownMenuItem 
+                                  key={s.id} 
+                                  onClick={() => statusMutation.mutate({ id: ticket.id, status: s.id })}
+                                >
+                                  Move to {s.label}
+                                </DropdownMenuItem>
+                              ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -162,16 +194,16 @@ export default function Kanban() {
                               {ticket.assignee_ids.length > 0 ? (
                                 <div className="flex -space-x-1.5">
                                   {ticket.assignee_ids.map(uid => {
-                                    const user = USERS.find(u => u.id === uid);
+                                    const user = users.find(u => u.id === uid);
                                     if (!user) return null;
                                     return (
-                                      <img 
+                                      <div 
                                         key={uid} 
-                                        src={user.avatar} 
-                                        alt={user.name} 
-                                        className="w-5 h-5 rounded-full border border-card" 
+                                        className="w-5 h-5 rounded-full border border-card bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary"
                                         title={user.name}
-                                      />
+                                      >
+                                        {user.name.charAt(0)}
+                                      </div>
                                     );
                                   })}
                                 </div>
@@ -186,6 +218,11 @@ export default function Kanban() {
                         </Link>
                       </div>
                     ))}
+                    {columnTickets.length === 0 && (
+                      <div className="text-center text-xs text-muted-foreground py-8 opacity-50">
+                        No tickets
+                      </div>
+                    )}
                   </div>
                 </div>
               );
