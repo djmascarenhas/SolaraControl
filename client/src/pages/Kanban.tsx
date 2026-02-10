@@ -136,32 +136,32 @@ export default function Kanban() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-          <div className="flex h-full gap-4 min-w-max">
+        <div className="flex-1 overflow-y-hidden p-3 px-4">
+          <div className="flex h-full gap-2">
             {statusColumns.map(column => {
               const columnTickets = getTicketsByStatus(column.id);
               
               return (
-                <div key={column.id} className="w-80 flex flex-col h-full rounded-lg bg-muted/30 border border-border/50">
-                  <div className="p-3 border-b border-border/50 flex items-center justify-between shrink-0 bg-muted/20">
-                    <h3 className="font-medium text-sm flex items-center gap-2">
-                      {column.label}
-                      <span className="px-1.5 py-0.5 rounded-full bg-background border text-[10px] text-muted-foreground font-mono">
+                <div key={column.id} className="flex-1 min-w-0 flex flex-col h-full rounded-lg bg-muted/30 border border-border/50">
+                  <div className="px-2 py-2 border-b border-border/50 flex items-center justify-between shrink-0 bg-muted/20">
+                    <h3 className="font-medium text-xs flex items-center gap-1.5 truncate">
+                      <span className="truncate">{column.label}</span>
+                      <span className="px-1 py-0.5 rounded-full bg-background border text-[9px] text-muted-foreground font-mono shrink-0">
                         {columnTickets.length}
                       </span>
                     </h3>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
                     {columnTickets.map(ticket => (
                       <div 
                         key={ticket.id} 
-                        className="group relative bg-card border rounded-md p-3 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer"
+                        className="group relative bg-card border rounded-md p-2 shadow-sm hover:shadow-md hover:border-primary/50 transition-all cursor-pointer"
                         data-testid={`card-ticket-${ticket.public_id}`}
                       >
-                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <DropdownMenu>
-                            <DropdownMenuTrigger className="p-1 hover:bg-muted rounded text-muted-foreground">
+                            <DropdownMenuTrigger className="p-0.5 hover:bg-muted rounded text-muted-foreground">
                               <MoreHorizontal className="w-3 h-3" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
@@ -178,34 +178,34 @@ export default function Kanban() {
                         </div>
 
                         <Link href={`/ticket/${ticket.id}`} className="block">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-mono text-[10px] text-muted-foreground font-medium">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="font-mono text-[9px] text-muted-foreground font-medium">
                               {ticket.public_id}
                             </span>
-                            <Badge variant="outline" className={cn("text-[10px] py-0 px-1.5 h-4", SEVERITY_COLORS[ticket.severity])}>
+                            <Badge variant="outline" className={cn("text-[9px] py-0 px-1 h-3.5", SEVERITY_COLORS[ticket.severity])}>
                               {ticket.severity}
                             </Badge>
                           </div>
                           
-                          <h4 className="text-sm font-medium leading-tight mb-2 pr-4 text-card-foreground">
+                          <h4 className="text-xs font-medium leading-tight mb-1.5 pr-3 text-card-foreground line-clamp-2">
                             {ticket.title}
                           </h4>
                           
-                          <div className="flex items-center justify-between mt-3">
-                            <Badge variant="secondary" className="text-[10px] font-normal text-muted-foreground bg-muted">
+                          <div className="flex items-center justify-between mt-2">
+                            <Badge variant="secondary" className="text-[9px] font-normal text-muted-foreground bg-muted px-1 py-0">
                               {ticket.queue}
                             </Badge>
                             
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               {ticket.assignee_ids.length > 0 ? (
-                                <div className="flex -space-x-1.5">
-                                  {ticket.assignee_ids.map(uid => {
+                                <div className="flex -space-x-1">
+                                  {ticket.assignee_ids.slice(0, 2).map(uid => {
                                     const user = users.find(u => u.id === uid);
                                     if (!user) return null;
                                     return (
                                       <div 
                                         key={uid} 
-                                        className="w-5 h-5 rounded-full border border-card bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary"
+                                        className="w-4 h-4 rounded-full border border-card bg-primary/10 flex items-center justify-center text-[7px] font-bold text-primary"
                                         title={user.name}
                                       >
                                         {user.name.charAt(0)}
@@ -214,11 +214,8 @@ export default function Kanban() {
                                   })}
                                 </div>
                               ) : (
-                                <span className="text-[10px] text-muted-foreground italic">{t("kanban.unassigned")}</span>
+                                <span className="text-[9px] text-muted-foreground italic">{t("kanban.unassigned")}</span>
                               )}
-                              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                {formatDistanceToNow(new Date(ticket.last_activity_at), { addSuffix: true }).replace("about ", "")}
-                              </span>
                             </div>
                           </div>
                         </Link>

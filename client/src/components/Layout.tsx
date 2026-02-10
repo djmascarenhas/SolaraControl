@@ -43,15 +43,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
-      <aside className="w-64 border-r border-sidebar-border bg-sidebar flex flex-col">
-        <div className="p-6 border-b border-sidebar-border">
-          <h1 className="font-mono font-bold text-lg tracking-tight flex items-center gap-2">
-            <div className="w-3 h-3 bg-primary rounded-full animate-pulse" />
+      <aside className="w-52 border-r border-sidebar-border bg-sidebar flex flex-col shrink-0">
+        <div className="p-4 border-b border-sidebar-border">
+          <h1 className="font-mono font-bold text-sm tracking-tight flex items-center gap-2">
+            <div className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse" />
             MISSION CTL
           </h1>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.href;
