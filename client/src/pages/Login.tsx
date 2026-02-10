@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +8,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -31,9 +33,9 @@ export default function Login() {
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="w-3 h-3 bg-primary rounded-full animate-pulse" />
-            <h1 className="font-mono font-bold text-xl tracking-tight">MISSION CTL</h1>
+            <h1 className="font-mono font-bold text-xl tracking-tight">{t("login.title")}</h1>
           </div>
-          <p className="text-sm text-muted-foreground">Sign in to your support operations center</p>
+          <p className="text-sm text-muted-foreground">{t("login.subtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -45,7 +47,7 @@ export default function Login() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-xs font-medium">Email</Label>
+            <Label htmlFor="email" className="text-xs font-medium">{t("login.email")}</Label>
             <Input
               id="email"
               type="email"
@@ -59,7 +61,7 @@ export default function Login() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-xs font-medium">Password</Label>
+            <Label htmlFor="password" className="text-xs font-medium">{t("login.password")}</Label>
             <Input
               id="password"
               type="password"
@@ -73,12 +75,12 @@ export default function Login() {
           </div>
 
           <Button type="submit" className="w-full h-10" disabled={loading} data-testid="button-login">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign In"}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("login.button")}
           </Button>
         </form>
 
         <p className="text-center text-xs text-muted-foreground">
-          Default: admin@mission.ctl / admin123
+          {t("login.default")}
         </p>
       </div>
     </div>

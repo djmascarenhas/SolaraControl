@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Layout } from "@/components/Layout";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { 
   Filter, 
   MoreHorizontal, 
@@ -33,15 +34,18 @@ interface TicketData {
   created_at: string;
 }
 
-const STATUS_COLUMNS: { id: TicketStatus; label: string }[] = [
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'needs_info', label: 'Needs Info' },
-  { id: 'assigned', label: 'Assigned' },
-  { id: 'in_progress', label: 'In Progress' },
-  { id: 'waiting', label: 'Waiting' },
-  { id: 'review', label: 'Review' },
-  { id: 'done', label: 'Done' },
-];
+function useStatusColumns() {
+  const { t } = useI18n();
+  return [
+    { id: 'inbox' as TicketStatus, label: t("status.inbox") },
+    { id: 'needs_info' as TicketStatus, label: t("status.needs_info") },
+    { id: 'assigned' as TicketStatus, label: t("status.assigned") },
+    { id: 'in_progress' as TicketStatus, label: t("status.in_progress") },
+    { id: 'waiting' as TicketStatus, label: t("status.waiting") },
+    { id: 'review' as TicketStatus, label: t("status.review") },
+    { id: 'done' as TicketStatus, label: t("status.done") },
+  ];
+}
 
 const SEVERITY_COLORS: Record<string, string> = {
   S1: "bg-destructive/15 text-destructive border-destructive/20",
@@ -50,9 +54,11 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 export default function Kanban() {
+  const { t } = useI18n();
   const [filterQueue, setFilterQueue] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const statusColumns = useStatusColumns();
 
   const params = new URLSearchParams();
   if (filterQueue) params.set("queue", filterQueue);
@@ -98,41 +104,41 @@ export default function Kanban() {
         <div className="px-6 py-3 border-b flex items-center gap-4 bg-background/50 backdrop-blur-sm shrink-0">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
             <Filter className="w-4 h-4" />
-            <span>Filters:</span>
+            <span>{t("kanban.filters")}</span>
           </div>
           
           <DropdownMenu>
             <DropdownMenuTrigger className="px-3 py-1.5 text-xs font-medium border rounded-md hover:bg-muted/50 transition-colors flex items-center gap-2" data-testid="filter-queue">
-              Queue: {filterQueue ? filterQueue : 'All'}
+              {t("kanban.queue")}: {filterQueue ? filterQueue : t("kanban.all")}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => setFilterQueue(null)}>All</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterQueue('support')}>Support</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterQueue('budget')}>Budget</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterQueue('logistics')}>Logistics</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterQueue(null)}>{t("kanban.all")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterQueue('support')}>{t("queue.support")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterQueue('budget')}>{t("queue.budget")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterQueue('logistics')}>{t("queue.logistics")}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger className="px-3 py-1.5 text-xs font-medium border rounded-md hover:bg-muted/50 transition-colors flex items-center gap-2" data-testid="filter-severity">
-              Severity: {filterSeverity ? filterSeverity : 'All'}
+              {t("kanban.severity")}: {filterSeverity ? filterSeverity : t("kanban.all")}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => setFilterSeverity(null)}>All</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterSeverity('S1')}>S1 - Critical</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterSeverity('S2')}>S2 - Major</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setFilterSeverity('S3')}>S3 - Minor</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterSeverity(null)}>{t("kanban.all")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterSeverity('S1')}>{t("severity.s1")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterSeverity('S2')}>{t("severity.s2")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterSeverity('S3')}>{t("severity.s3")}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <div className="ml-auto text-xs text-muted-foreground">
-            {tickets.length} tickets
+            {tickets.length} {t("kanban.tickets")}
           </div>
         </div>
 
         <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
           <div className="flex h-full gap-4 min-w-max">
-            {STATUS_COLUMNS.map(column => {
+            {statusColumns.map(column => {
               const columnTickets = getTicketsByStatus(column.id);
               
               return (
@@ -159,12 +165,12 @@ export default function Kanban() {
                               <MoreHorizontal className="w-3 h-3" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {STATUS_COLUMNS.filter(s => s.id !== ticket.status).map(s => (
+                              {statusColumns.filter(s => s.id !== ticket.status).map(s => (
                                 <DropdownMenuItem 
                                   key={s.id} 
                                   onClick={() => statusMutation.mutate({ id: ticket.id, status: s.id })}
                                 >
-                                  Move to {s.label}
+                                  {t("kanban.move_to")} {s.label}
                                 </DropdownMenuItem>
                               ))}
                             </DropdownMenuContent>
@@ -208,7 +214,7 @@ export default function Kanban() {
                                   })}
                                 </div>
                               ) : (
-                                <span className="text-[10px] text-muted-foreground italic">Unassigned</span>
+                                <span className="text-[10px] text-muted-foreground italic">{t("kanban.unassigned")}</span>
                               )}
                               <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                                 {formatDistanceToNow(new Date(ticket.last_activity_at), { addSuffix: true }).replace("about ", "")}
@@ -220,7 +226,7 @@ export default function Kanban() {
                     ))}
                     {columnTickets.length === 0 && (
                       <div className="text-center text-xs text-muted-foreground py-8 opacity-50">
-                        No tickets
+                        {t("kanban.no_tickets")}
                       </div>
                     )}
                   </div>

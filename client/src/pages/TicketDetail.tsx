@@ -16,6 +16,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,6 +92,7 @@ export default function TicketDetail() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const { data: ticket, isLoading: ticketLoading } = useQuery<TicketDetailData>({
     queryKey: [`/api/tickets/${id}`],
@@ -130,10 +132,10 @@ export default function TicketDetail() {
       queryClient.invalidateQueries({ queryKey: [`/api/tickets/${id}/comments`] });
       queryClient.invalidateQueries({ queryKey: [`/api/tickets/${id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
-      toast({ title: activeTab === 'reply' ? "Reply sent" : "Note saved" });
+      toast({ title: activeTab === 'reply' ? t("ticket.reply_sent") : t("ticket.note_saved") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -187,7 +189,7 @@ export default function TicketDetail() {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-mono text-sm font-bold text-muted-foreground">{ticket.public_id}</span>
                   {ticket.severity === 'S1' && (
-                    <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">CRITICAL</Badge>
+                    <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">{t("ticket.critical")}</Badge>
                   )}
                 </div>
                 <h2 className="font-semibold text-lg truncate leading-none">{ticket.title}</h2>
@@ -240,7 +242,7 @@ export default function TicketDetail() {
                       <div className="flex items-baseline gap-2 mb-1">
                         <span className="font-medium text-sm">{authorName}</span>
                         <span className="text-xs text-muted-foreground">{format(new Date(comment.created_at), "MMM d, HH:mm")}</span>
-                        {isInternal && <span className="text-[10px] font-mono text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">INTERNAL</span>}
+                        {isInternal && <span className="text-[10px] font-mono text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">{t("ticket.internal")}</span>}
                       </div>
                       
                       <div className={cn(
@@ -272,7 +274,7 @@ export default function TicketDetail() {
                     )}
                     data-testid="tab-reply"
                   >
-                    <Send className="w-3 h-3" /> Reply to Visitor
+                    <Send className="w-3 h-3" /> {t("ticket.reply")}
                   </button>
                   <button
                     onClick={() => setActiveTab('note')}
@@ -282,14 +284,14 @@ export default function TicketDetail() {
                     )}
                     data-testid="tab-note"
                   >
-                    <Lock className="w-3 h-3" /> Internal Note
+                    <Lock className="w-3 h-3" /> {t("ticket.note")}
                   </button>
                 </div>
                 <div className={cn("p-3", activeTab === 'note' && "bg-amber-50/50 dark:bg-amber-950/10")}>
                   <Textarea 
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    placeholder={activeTab === 'reply' ? "Write a reply..." : "Add a private note for the team..."}
+                    placeholder={activeTab === 'reply' ? t("ticket.reply_placeholder") : t("ticket.note_placeholder")}
                     className="min-h-[100px] border-none focus-visible:ring-0 resize-none bg-transparent p-0 text-sm"
                     data-testid="textarea-composer"
                   />
@@ -303,7 +305,7 @@ export default function TicketDetail() {
                       data-testid="button-send"
                      >
                        {commentMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                       {activeTab === 'reply' ? "Send Reply" : "Save Note"} 
+                       {activeTab === 'reply' ? t("ticket.send_reply") : t("ticket.save_note")} 
                        {activeTab === 'reply' && !commentMutation.isPending && <Send className="w-3 h-3" />}
                      </Button>
                   </div>
@@ -317,11 +319,11 @@ export default function TicketDetail() {
           <div className="p-6 space-y-8">
             
             <div className="space-y-4">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Properties</h3>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("ticket.properties")}</h3>
               
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Status</label>
+                  <label className="text-xs font-medium text-muted-foreground">{t("ticket.status")}</label>
                   <Select 
                     value={ticket.status} 
                     onValueChange={(v) => updateMutation.mutate({ status: v })}
@@ -331,19 +333,19 @@ export default function TicketDetail() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="inbox">Inbox</SelectItem>
-                      <SelectItem value="needs_info">Needs Info</SelectItem>
-                      <SelectItem value="assigned">Assigned</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="waiting">Waiting</SelectItem>
-                      <SelectItem value="review">Review</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
+                      <SelectItem value="inbox">{t("status.inbox")}</SelectItem>
+                      <SelectItem value="needs_info">{t("status.needs_info")}</SelectItem>
+                      <SelectItem value="assigned">{t("status.assigned")}</SelectItem>
+                      <SelectItem value="in_progress">{t("status.in_progress")}</SelectItem>
+                      <SelectItem value="waiting">{t("status.waiting")}</SelectItem>
+                      <SelectItem value="review">{t("status.review")}</SelectItem>
+                      <SelectItem value="done">{t("status.done")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Queue</label>
+                  <label className="text-xs font-medium text-muted-foreground">{t("ticket.queue")}</label>
                   <Select 
                     value={ticket.queue}
                     onValueChange={(v) => updateMutation.mutate({ queue: v })}
@@ -353,15 +355,15 @@ export default function TicketDetail() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="support">Support</SelectItem>
-                      <SelectItem value="budget">Budget</SelectItem>
-                      <SelectItem value="logistics">Logistics</SelectItem>
+                      <SelectItem value="support">{t("queue.support")}</SelectItem>
+                      <SelectItem value="budget">{t("queue.budget")}</SelectItem>
+                      <SelectItem value="logistics">{t("queue.logistics")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Severity</label>
+                  <label className="text-xs font-medium text-muted-foreground">{t("ticket.severity")}</label>
                   <Select 
                     value={ticket.severity}
                     onValueChange={(v) => updateMutation.mutate({ severity: v })}
@@ -371,15 +373,15 @@ export default function TicketDetail() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="S1">S1 - Critical</SelectItem>
-                      <SelectItem value="S2">S2 - Major</SelectItem>
-                      <SelectItem value="S3">S3 - Minor</SelectItem>
+                      <SelectItem value="S1">{t("severity.s1")}</SelectItem>
+                      <SelectItem value="S2">{t("severity.s2")}</SelectItem>
+                      <SelectItem value="S3">{t("severity.s3")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Assignees</label>
+                  <label className="text-xs font-medium text-muted-foreground">{t("ticket.assignees")}</label>
                   <div className="flex flex-wrap gap-2 mb-2">
                     {assignees.map(u => (
                        <Badge key={u.id} variant="secondary" className="gap-1 pl-1 pr-2 py-0.5 font-normal">
@@ -395,7 +397,7 @@ export default function TicketDetail() {
                     }
                   }}>
                     <SelectTrigger className="h-7 text-xs bg-background" data-testid="select-assignee">
-                      <SelectValue placeholder="Add assignee..." />
+                      <SelectValue placeholder={t("ticket.add_assignee")} />
                     </SelectTrigger>
                     <SelectContent>
                       {users.filter(u => !ticket.assignee_ids.includes(u.id)).map(u => (
@@ -412,7 +414,7 @@ export default function TicketDetail() {
             {visitor && (
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                  Visitor
+                  {t("ticket.visitor")}
                   {visitor.persona_type && <Badge variant="outline" className="text-[10px] h-4 py-0 px-1">{visitor.persona_type}</Badge>}
                 </h3>
                 
@@ -457,9 +459,9 @@ export default function TicketDetail() {
                 <Separator />
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Company</h3>
+                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("ticket.company")}</h3>
                     {company.status === 'pending_review' && (
-                      <Badge variant="destructive" className="h-4 text-[9px] px-1 bg-orange-500 hover:bg-orange-600 border-none">REVIEW</Badge>
+                      <Badge variant="destructive" className="h-4 text-[9px] px-1 bg-orange-500 hover:bg-orange-600 border-none">{t("ticket.company_review")}</Badge>
                     )}
                   </div>
                   
@@ -506,7 +508,7 @@ export default function TicketDetail() {
 
             <Separator />
              <div className="space-y-3">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Other Tickets</h3>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("ticket.other_tickets")}</h3>
               <div className="space-y-2">
                 {ticket.other_tickets.map(otherTicket => (
                    <Link key={otherTicket.id} href={`/ticket/${otherTicket.id}`}>
@@ -522,7 +524,7 @@ export default function TicketDetail() {
                    </Link>
                 ))}
                 {ticket.other_tickets.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic">No other tickets from this visitor.</p>
+                  <p className="text-xs text-muted-foreground italic">{t("ticket.no_other")}</p>
                 )}
               </div>
             </div>

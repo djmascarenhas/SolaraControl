@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ interface UserData {
 
 export default function Admin() {
   const { user: authUser } = useAuth();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -55,10 +57,10 @@ export default function Admin() {
       setNewName("");
       setNewPassword("");
       setNewRole("member");
-      toast({ title: "User created successfully" });
+      toast({ title: t("admin.created") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -68,10 +70,10 @@ export default function Admin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: "User deleted" });
+      toast({ title: t("admin.deleted") });
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
     },
   });
 
@@ -79,7 +81,7 @@ export default function Admin() {
     return (
       <Layout>
         <div className="flex items-center justify-center h-full">
-          <p className="text-muted-foreground">Access restricted to administrators.</p>
+          <p className="text-muted-foreground">{t("admin.restricted")}</p>
         </div>
       </Layout>
     );
@@ -89,32 +91,32 @@ export default function Admin() {
     <Layout>
       <div className="max-w-3xl mx-auto p-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold tracking-tight">Team Management</h2>
+          <h2 className="text-2xl font-bold tracking-tight">{t("admin.title")}</h2>
           <Button size="sm" onClick={() => setShowForm(!showForm)} data-testid="button-add-user">
             <UserPlus className="w-4 h-4 mr-2" />
-            Add User
+            {t("admin.add_user")}
           </Button>
         </div>
 
         {showForm && (
           <div className="bg-card border rounded-lg p-4 mb-6 space-y-4">
-            <h3 className="font-medium text-sm">New User</h3>
+            <h3 className="font-medium text-sm">{t("admin.new_user")}</h3>
             <div className="grid grid-cols-2 gap-4">
               <Input
-                placeholder="Name"
+                placeholder={t("admin.name")}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 data-testid="input-new-name"
               />
               <Input
-                placeholder="Email"
+                placeholder={t("admin.email")}
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 data-testid="input-new-email"
               />
               <Input
-                placeholder="Password"
+                placeholder={t("admin.password")}
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -138,9 +140,9 @@ export default function Admin() {
                 disabled={createMutation.isPending || !newEmail || !newName || !newPassword}
                 data-testid="button-create-user"
               >
-                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create User"}
+                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : t("admin.create")}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>{t("admin.cancel")}</Button>
             </div>
           </div>
         )}

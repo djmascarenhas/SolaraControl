@@ -5,20 +5,41 @@ import {
   Users, 
   Search, 
   LogOut,
-  Bell
+  Bell,
+  Sun,
+  Moon,
+  Droplets
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
+import { useTheme, type Theme } from "@/lib/theme";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+const THEME_CYCLE: { current: Theme; next: Theme; icon: typeof Sun; label: string }[] = [
+  { current: "light", next: "dark", icon: Sun, label: "Light" },
+  { current: "dark", next: "light-blue", icon: Moon, label: "Dark" },
+  { current: "light-blue", next: "light", icon: Droplets, label: "Blue" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { lang, setLang, t } = useI18n();
+  const { theme, setTheme } = useTheme();
 
   const navItems = [
-    { href: "/", label: "Inbox", icon: LayoutDashboard },
-    { href: "/feed", label: "Activity Feed", icon: Activity },
-    ...(user?.role === "admin" ? [{ href: "/admin", label: "Team", icon: Users }] : []),
+    { href: "/", label: t("nav.inbox"), icon: LayoutDashboard },
+    { href: "/feed", label: t("nav.feed"), icon: Activity },
+    ...(user?.role === "admin" ? [{ href: "/admin", label: t("nav.team"), icon: Users }] : []),
   ];
+
+  const currentTheme = THEME_CYCLE.find(tc => tc.current === theme) || THEME_CYCLE[0];
+  const ThemeIcon = currentTheme.icon;
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
@@ -66,7 +87,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             data-testid="button-logout"
           >
             <LogOut className="w-3 h-3" />
-            Sign Out
+            {t("nav.signout")}
           </button>
         </div>
       </aside>
@@ -78,16 +99,69 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input 
                 type="text" 
-                placeholder="Search tickets (ID, content)..." 
+                placeholder={t("header.search")}
                 className="w-full h-9 pl-9 pr-4 text-sm bg-muted/50 border-none rounded-md focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-muted-foreground/70"
                 data-testid="input-search"
               />
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="relative text-muted-foreground hover:text-foreground transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
+          <div className="flex items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setLang("pt")}
+                  className={cn(
+                    "w-8 h-8 rounded-md flex items-center justify-center text-lg transition-all",
+                    lang === "pt" 
+                      ? "bg-primary/10 ring-1 ring-primary/30" 
+                      : "hover:bg-muted/80 opacity-50 hover:opacity-100"
+                  )}
+                  data-testid="button-lang-pt"
+                >
+                  🇧🇷
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p>Português</p></TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setLang("en")}
+                  className={cn(
+                    "w-8 h-8 rounded-md flex items-center justify-center text-lg transition-all",
+                    lang === "en" 
+                      ? "bg-primary/10 ring-1 ring-primary/30" 
+                      : "hover:bg-muted/80 opacity-50 hover:opacity-100"
+                  )}
+                  data-testid="button-lang-en"
+                >
+                  🇺🇸
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p>English</p></TooltipContent>
+            </Tooltip>
+
+            <div className="w-px h-5 bg-border mx-1" />
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setTheme(currentTheme.next)}
+                  className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-all"
+                  data-testid="button-theme"
+                >
+                  <ThemeIcon className="w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom"><p>{currentTheme.label}</p></TooltipContent>
+            </Tooltip>
+
+            <div className="w-px h-5 bg-border mx-1" />
+
+            <button className="relative text-muted-foreground hover:text-foreground transition-colors w-8 h-8 flex items-center justify-center">
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border-2 border-background" />
             </button>
           </div>
         </header>

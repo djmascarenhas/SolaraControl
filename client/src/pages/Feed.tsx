@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { useI18n } from "@/lib/i18n";
 import { format } from "date-fns";
 import { 
   MessageSquare, 
@@ -64,6 +65,7 @@ function getActivityDescription(activity: FeedActivity): string {
 }
 
 export default function Feed() {
+  const { t } = useI18n();
   const { data: activities = [], isLoading } = useQuery<FeedActivity[]>({
     queryKey: ["/api/feed"],
     queryFn: getQueryFn({ on401: "throw" }),
@@ -83,10 +85,10 @@ export default function Feed() {
   return (
     <Layout>
       <div className="max-w-3xl mx-auto p-8">
-        <h2 className="text-2xl font-bold mb-6 tracking-tight">Activity Feed</h2>
+        <h2 className="text-2xl font-bold mb-6 tracking-tight">{t("feed.title")}</h2>
         
         {activities.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No activities yet.</p>
+          <p className="text-muted-foreground text-sm">{t("feed.empty")}</p>
         ) : (
           <div className="relative border-l border-border/60 ml-3 space-y-8">
             {activities.map((activity) => (
