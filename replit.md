@@ -1,10 +1,10 @@
-# Mission Control - Support Operations Center
+# SolaraControl - Support Operations Center
 
 ## Overview
 
-Mission Control is a web-based support ticket management system (MVP) designed for external support operations via Telegram DM. It provides a Kanban board, activity feed, and detailed ticket views for multi-user teams handling support, budget, and logistics queues.
+SolaraControl is a web-based support ticket management system (MVP) designed for external support operations via Telegram DM. It provides a Kanban board, activity feed, and detailed ticket views for multi-user teams handling support, budget, and logistics queues.
 
-The app manages support tickets with statuses (inbox, needs_info, assigned, in_progress, waiting, review, done), categorized by queue (support/budget/logistics) and severity (S1/S2/S3). It tracks visitors (end-users who interact via Telegram), companies (B2B entities), and internal team members. Each ticket has a comment thread supporting both internal and external messages.
+The app manages support tickets with statuses (inbox, needs_info, assigned, in_progress, waiting, review, done), categorized by queue (support/budget/logistics) and severity (S1/S2/S3). It tracks visitors (end-users who interact via Telegram), companies (B2B entities), and internal team members. Each ticket has a comment thread supporting both internal and external messages. Ticket IDs use the prefix "SOL-" (e.g., "SOL-000123").
 
 ## User Preferences
 
@@ -44,7 +44,7 @@ Preferred communication style: Simple, everyday language.
   - `visitors` — External users (Telegram users), with registration/onboarding fields, persona type, contact info
   - `companies` — B2B company entities (CNPJ, trade name, legal name, status)
   - `visitor_company` — Many-to-many relationship between visitors and companies
-  - `tickets` — Support tickets with public_id (e.g., "MC-000123"), status, queue, severity, visitor/company references
+  - `tickets` — Support tickets with public_id (e.g., "SOL-000123"), status, queue, severity, visitor/company references
   - `ticket_assignees` — Many-to-many between tickets and users
   - `comments` — Ticket comments with `is_internal` flag and author type (visitor/admin/system)
   - `activities` — Activity log entries with type, ticket reference, payload JSON
@@ -96,6 +96,7 @@ migrations/       — Drizzle migration output directory
 ### Environment Variables
 - `DATABASE_URL` — PostgreSQL connection string (required)
 - `JWT_SECRET` — Secret for signing JWT tokens (defaults to `"mission-control-dev-secret"` in dev)
+- `TELEGRAM_BOT_TOKEN` — Telegram Bot API token for sending/receiving messages (optional, graceful fallback)
 
 ### Replit-Specific Integrations
 - `@replit/vite-plugin-runtime-error-modal` — Runtime error overlay in development

@@ -91,7 +91,7 @@ export const VISITORS: Visitor[] = [
 export const TICKETS: Ticket[] = [
   { 
     id: 't1', 
-    public_id: 'MC-001024', 
+    public_id: 'SOL-001024', 
     title: 'Integration failure with API v2', 
     description: 'I am getting 500 error when trying to sync inventory.', 
     status: 'in_progress', 
@@ -104,7 +104,7 @@ export const TICKETS: Ticket[] = [
   },
   { 
     id: 't2', 
-    public_id: 'MC-001025', 
+    public_id: 'SOL-001025', 
     title: 'Budget approval for Q3', 
     description: 'Need review on the attached logistics budget.', 
     status: 'review', 
@@ -117,7 +117,7 @@ export const TICKETS: Ticket[] = [
   },
   { 
     id: 't3', 
-    public_id: 'MC-001026', 
+    public_id: 'SOL-001026', 
     title: 'Delivery delay SP-RJ', 
     description: 'Package #9988 is stuck in distribution center.', 
     status: 'inbox', 
@@ -130,7 +130,7 @@ export const TICKETS: Ticket[] = [
   },
   { 
     id: 't4', 
-    public_id: 'MC-001027', 
+    public_id: 'SOL-001027', 
     title: 'Login issues', 
     description: 'Cannot reset my password via email.', 
     status: 'needs_info', 

@@ -48,6 +48,7 @@ export interface IStorage {
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: string, data: Partial<Ticket>): Promise<Ticket | undefined>;
   getNextPublicId(): Promise<string>;
+  getLatestActiveTicketByVisitorId(visitorId: string): Promise<Ticket | undefined>;
 
   // Ticket Assignees
   setTicketAssignees(ticketId: string, userIds: string[]): Promise<void>;
@@ -226,7 +227,22 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)::int` })
       .from(tickets);
     const num = (result?.count || 0) + 1;
-    return `MC-${String(num).padStart(6, '0')}`;
+    return `SOL-${String(num).padStart(6, '0')}`;
+  }
+
+  async getLatestActiveTicketByVisitorId(visitorId: string): Promise<Ticket | undefined> {
+    const [ticket] = await db
+      .select()
+      .from(tickets)
+      .where(
+        and(
+          eq(tickets.visitor_id, visitorId),
+          sql`${tickets.status} NOT IN ('done')`
+        )
+      )
+      .orderBy(desc(tickets.last_activity_at))
+      .limit(1);
+    return ticket;
   }
 
   // ── Ticket Assignees ──

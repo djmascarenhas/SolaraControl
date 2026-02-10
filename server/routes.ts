@@ -283,6 +283,85 @@ export async function registerRoutes(
   });
 
   // ═══════════════════════════════════════════
+  // TELEGRAM WEBHOOK
+  // ═══════════════════════════════════════════
+
+  app.post("/api/telegram/webhook", async (req: Request, res: Response) => {
+    try {
+      const update = req.body;
+      const message = update?.message;
+      if (!message || !message.text) {
+        return res.json({ ok: true });
+      }
+
+      const telegramUserId = message.from?.id;
+      const telegramChatId = message.chat?.id;
+      const text = message.text;
+      const firstName = message.from?.first_name || "";
+      const lastName = message.from?.last_name || "";
+      const senderName = `${firstName} ${lastName}`.trim() || "Unknown";
+
+      if (!telegramUserId || !telegramChatId) {
+        return res.json({ ok: true });
+      }
+
+      let visitor = await storage.getVisitorByTelegramId(telegramUserId);
+      if (!visitor) {
+        visitor = await storage.createVisitor({
+          telegram_user_id: telegramUserId,
+          telegram_chat_id: telegramChatId,
+          name: senderName,
+          is_registered: false,
+        });
+      }
+
+      let ticket = await storage.getLatestActiveTicketByVisitorId(visitor.id);
+
+      if (!ticket) {
+        const publicId = await storage.getNextPublicId();
+        ticket = await storage.createTicket({
+          public_id: publicId,
+          queue: "support",
+          status: "inbox",
+          severity: "S3",
+          title: text.substring(0, 120),
+          description: text,
+          visitor_id: visitor.id,
+          source: "telegram",
+          source_chat_id: telegramChatId,
+          last_activity_at: new Date(),
+        });
+
+        await storage.createActivity({
+          type: "ticket_created",
+          ticket_id: ticket.id,
+          payload: { title: ticket.title, source: "telegram" },
+        });
+      }
+
+      await storage.createComment({
+        ticket_id: ticket.id,
+        author_type: "visitor",
+        author_ref: visitor.id,
+        body: text,
+        is_internal: false,
+        telegram_message_id: message.message_id,
+      });
+
+      await storage.createActivity({
+        type: "telegram_message_received",
+        ticket_id: ticket.id,
+        payload: { snippet: text.substring(0, 100), from: senderName },
+      });
+
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Telegram webhook error:", err);
+      return res.json({ ok: true });
+    }
+  });
+
+  // ═══════════════════════════════════════════
   // FEED (Activities)
   // ═══════════════════════════════════════════
 

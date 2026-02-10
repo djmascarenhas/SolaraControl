@@ -108,7 +108,7 @@ async function seed() {
 
   // Tickets
   const [t1] = await db.insert(tickets).values({
-    public_id: "MC-000001",
+    public_id: "SOL-000001",
     queue: "support",
     status: "in_progress",
     severity: "S1",
@@ -122,7 +122,7 @@ async function seed() {
   }).returning();
 
   const [t2] = await db.insert(tickets).values({
-    public_id: "MC-000002",
+    public_id: "SOL-000002",
     queue: "budget",
     status: "review",
     severity: "S2",
@@ -136,7 +136,7 @@ async function seed() {
   }).returning();
 
   const [t3] = await db.insert(tickets).values({
-    public_id: "MC-000003",
+    public_id: "SOL-000003",
     queue: "logistics",
     status: "inbox",
     severity: "S3",
@@ -149,7 +149,7 @@ async function seed() {
   }).returning();
 
   const [t4] = await db.insert(tickets).values({
-    public_id: "MC-000004",
+    public_id: "SOL-000004",
     queue: "support",
     status: "needs_info",
     severity: "S2",
