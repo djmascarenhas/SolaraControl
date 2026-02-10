@@ -104,6 +104,88 @@ export async function registerRoutes(
   });
 
   // ═══════════════════════════════════════════
+  // VISITORS
+  // ═══════════════════════════════════════════
+
+  app.get("/api/visitors", authMiddleware, async (req: Request, res: Response) => {
+    const persona_type = req.query.persona_type as string | undefined;
+    const visitors = await storage.getAllVisitors({ persona_type: persona_type || undefined });
+    return res.json(visitors);
+  });
+
+  app.post("/api/visitors/:id/message", authMiddleware, async (req: Request, res: Response) => {
+    if (req.user!.role === "viewer") {
+      return res.status(403).json({ message: "Viewers cannot send messages" });
+    }
+
+    const visitorId = req.params.id as string;
+    const { body } = req.body;
+    if (!body) return res.status(400).json({ message: "body is required" });
+
+    const visitor = await storage.getVisitor(visitorId);
+    if (!visitor) return res.status(404).json({ message: "Visitor not found" });
+    if (!visitor.telegram_chat_id) return res.status(400).json({ message: "Visitor has no Telegram chat" });
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) return res.status(500).json({ message: "Telegram bot not configured" });
+
+    let telegramMessageId: number | undefined;
+    try {
+      const tgRes = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: visitor.telegram_chat_id, text: body }),
+        }
+      );
+      const tgData = await tgRes.json() as any;
+      if (tgData.ok) {
+        telegramMessageId = tgData.result.message_id;
+      } else {
+        return res.status(500).json({ message: `Telegram error: ${tgData.description}` });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ message: `Telegram send failed: ${e.message}` });
+    }
+
+    let ticket = await storage.getLatestActiveTicketByVisitorId(visitor.id);
+    if (!ticket) {
+      const publicId = await storage.getNextPublicId();
+      ticket = await storage.createTicket({
+        public_id: publicId,
+        queue: "support",
+        status: "inbox",
+        severity: "S3",
+        title: `Mensagem para ${visitor.name || "visitante"}`,
+        description: body.substring(0, 200),
+        visitor_id: visitor.id,
+        source: "telegram",
+        source_chat_id: visitor.telegram_chat_id,
+        last_activity_at: new Date(),
+      });
+    }
+
+    const comment = await storage.createComment({
+      ticket_id: ticket.id,
+      author_type: "admin",
+      author_ref: req.user!.id,
+      body,
+      is_internal: false,
+      telegram_message_id: telegramMessageId,
+    });
+
+    await storage.createActivity({
+      type: "telegram_message_sent",
+      ticket_id: ticket.id,
+      user_id: req.user!.id,
+      payload: { snippet: body.substring(0, 100), visitor_name: visitor.name },
+    });
+
+    return res.status(201).json({ comment, ticket_id: ticket.id });
+  });
+
+  // ═══════════════════════════════════════════
   // TICKETS
   // ═══════════════════════════════════════════
 

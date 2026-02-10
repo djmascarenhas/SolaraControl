@@ -10,6 +10,7 @@ import Kanban from "@/pages/Kanban";
 import Feed from "@/pages/Feed";
 import TicketDetail from "@/pages/TicketDetail";
 import Admin from "@/pages/Admin";
+import SendMessage from "@/pages/SendMessage";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -34,6 +35,7 @@ function ProtectedRouter() {
       <Route path="/" component={Kanban} />
       <Route path="/feed" component={Feed} />
       <Route path="/ticket/:id" component={TicketDetail} />
+      <Route path="/send-message" component={SendMessage} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

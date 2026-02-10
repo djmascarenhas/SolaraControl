@@ -2,7 +2,8 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
   Activity, 
-  Users, 
+  Users,
+  MessageSquare,
   Search, 
   LogOut,
   Bell,
@@ -35,6 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/", label: t("nav.inbox"), icon: LayoutDashboard },
     { href: "/feed", label: t("nav.feed"), icon: Activity },
+    { href: "/send-message", label: t("nav.send_message"), icon: MessageSquare },
     ...(user?.role === "admin" ? [{ href: "/admin", label: t("nav.team"), icon: Users }] : []),
   ];
 

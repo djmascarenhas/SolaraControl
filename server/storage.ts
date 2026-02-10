@@ -31,6 +31,9 @@ export interface IStorage {
   getVisitorByTelegramId(telegramUserId: number): Promise<Visitor | undefined>;
   createVisitor(visitor: InsertVisitor): Promise<Visitor>;
 
+  // Visitors (list)
+  getAllVisitors(filters?: { persona_type?: string }): Promise<Visitor[]>;
+
   // Companies
   getCompany(id: string): Promise<Company | undefined>;
   getCompaniesByVisitorId(visitorId: string): Promise<Company[]>;
@@ -128,6 +131,14 @@ export class DatabaseStorage implements IStorage {
   async createVisitor(visitor: InsertVisitor): Promise<Visitor> {
     const [created] = await db.insert(visitors).values(visitor).returning();
     return created;
+  }
+
+  // ── Visitors (list) ──
+  async getAllVisitors(filters?: { persona_type?: string }): Promise<Visitor[]> {
+    if (filters?.persona_type) {
+      return db.select().from(visitors).where(eq(visitors.persona_type, filters.persona_type)).orderBy(visitors.name);
+    }
+    return db.select().from(visitors).orderBy(visitors.name);
   }
 
   // ── Companies ──

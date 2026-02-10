@@ -6,6 +6,7 @@ const translations = {
   pt: {
     "nav.inbox": "Painel",
     "nav.feed": "Atividades",
+    "nav.send_message": "Enviar Mensagem",
     "nav.team": "Equipe",
     "nav.signout": "Sair",
     "header.search": "Buscar tickets (ID, conteúdo)...",
@@ -76,6 +77,7 @@ const translations = {
   en: {
     "nav.inbox": "Inbox",
     "nav.feed": "Activity Feed",
+    "nav.send_message": "Send Message",
     "nav.team": "Team",
     "nav.signout": "Sign Out",
     "header.search": "Search tickets (ID, content)...",
