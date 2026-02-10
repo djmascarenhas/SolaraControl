@@ -47,7 +47,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-b border-sidebar-border">
           <h1 className="font-mono font-bold text-sm tracking-tight flex items-center gap-2">
             <div className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse" />
-            MISSION CTL
+            SolaraControl
           </h1>
         </div>
 
