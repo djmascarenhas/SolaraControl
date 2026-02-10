@@ -1,0 +1,208 @@
+Crie um app web “Mission Control” (MVP) para suporte externo via Telegram DM. O app terá Kanban + Feed + Detalhe do Ticket, multiusuário, com Postgres como banco. O bot do Telegram alimenta o banco; o app opera os tickets e (nesta fase) também pode enviar respostas ao visitante via Telegram (usando token do bot). Não precisa realtime; recarregar/polling simples serve.
+
+Stack obrigatória (para esta fase)
+Frontend: Next.js (React) + TypeScript
+Backend: Next.js API Routes (ou Express dentro do mesmo projeto, mas prefira API Routes)
+DB: Postgres (usar pg + migrations simples, ou Prisma se for mais rápido)
+Auth multiusuário: pode ser simples (login por email + senha com hash bcrypt) ou Supabase Auth. Se ficar mais rápido, implemente auth local com tabelas users e sessions JWT.
+Deploy: compatível com Replit (rodar npm run dev e depois npm start)
+Requisitos funcionais (MVP)
+1) Kanban
+Colunas por status:
+inbox, needs_info, assigned, in_progress, waiting, review, done
+Cada card mostra:
+public_id (protocolo tipo “MC-000123”)
+title (se vazio, gerar a partir das primeiras mensagens)
+queue (support|budget|logistics)
+severity (S1|S2|S3)
+assignees (nomes)
+“última atividade” (timestamp do último comment/activity)
+Permitir:
+mudar status por dropdown (drag-and-drop é opcional)
+filtrar por queue
+filtrar por severity
+filtrar por assignee
+busca por public_id e texto
+2) Feed (Atividades)
+Lista cronológica (mais recentes primeiro) de atividades:
+ticket_created
+status_changed
+queue_changed
+assigned_changed
+comment_added
+telegram_message_received
+telegram_message_sent
+company_created_pending_review
+Filtros por:
+queue, severidade, status, ticket, período
+3) Ticket Detail (thread)
+Mostrar dados do ticket:
+public_id, status, queue, severity, title, description
+visitante: nome (se tiver), telegram_user_id, dados de cadastro (persona, UF, cidade, whatsapp, email)
+empresa (se B2B): nome fantasia, razão social, CNPJ, telefone, status (active/pending_review)
+Thread de comentários:
+comments externos (visitante) e internos (admin/agente)
+distinguir is_internal
+Ações:
+mudar status/queue/severity
+atribuir usuários
+“marcar como Needs Info”
+“encerrar ticket”
+4) Responder ao visitante (via Telegram)
+No Ticket Detail:
+
+caixa “Responder ao visitante” (mensagem externa)
+caixa “Nota interna”
+ao enviar “Resposta”, o sistema:
+chama Telegram Bot API sendMessage para o telegram_chat_id do visitante
+registra em comments com author_type=admin, is_internal=false
+registra activity telegram_message_sent
+Nota interna:
+cria comment com is_internal=true
+5) Multiusuário e permissões
+Roles:
+admin: tudo
+member: ver/editar tickets, responder, comentar
+viewer: só leitura
+Tela básica de admin para:
+cadastrar usuários (email, nome, role)
+definir lista de admins do Telegram (opcional, só para referência)
+Requisitos de negócio (importantes)
+A) 3 inbox (queues)
+queue ∈ support|budget|logistics
+No MVP, o bot provavelmente cria como support e o time reclassifica no app.
+B) Múltiplos tickets por visitante, mas com UX de histórico
+Visitante pode ter vários tickets (especialmente B2B).
+No Ticket Detail, mostrar “Outros tickets deste visitante” (lista com status e links).
+Em visitors, mantenha current_ticket_id opcional (para o bot), mas o app deve permitir ver todos.
+C) PF vs B2B + Empresa
+visitante tem persona_type: consumer|integrator|provider
+se integrator|provider, existe fluxo de empresa:
+identificar empresa por CNPJ
+se não existir, criar company com status=pending_review
+registrar enrichment (json) de consulta pública (pode deixar como campo e preencher depois; nesta fase só o schema)
+Quando company for pending_review, criar activity e destacar no feed.
+Schema do Postgres (crie migrations)
+Tabelas mínimas:
+
+users
+id uuid pk
+email text unique
+name text
+password_hash text (se auth local)
+role text (admin|member|viewer)
+created_at, updated_at
+sessions (se auth local)
+id uuid pk
+user_id fk
+token text unique
+expires_at timestamp
+created_at
+visitors
+id uuid pk
+telegram_user_id bigint unique
+telegram_chat_id bigint
+is_registered boolean default false
+onboarding_step text default 'none'
+persona_type text nullable
+provider_type text nullable
+uf text nullable
+city text nullable
+whatsapp text nullable
+email text nullable
+created_at, updated_at
+companies
+id uuid pk
+status text (active|pending_review|rejected)
+cnpj text unique
+legal_name text
+trade_name text
+phone text
+uf text nullable
+city text nullable
+address text nullable
+enrichment jsonb nullable
+enrichment_source text nullable
+enrichment_at timestamp nullable
+created_at, updated_at
+visitor_company
+visitor_id fk
+company_id fk
+role text nullable
+created_at
+(unique visitor_id + company_id)
+tickets
+id uuid pk
+public_id text unique (MC-000001)
+queue text
+status text
+severity text
+title text
+description text
+visitor_id fk
+company_id fk nullable
+source text default 'telegram'
+source_chat_id bigint
+opened_at timestamp
+closed_at timestamp nullable
+last_activity_at timestamp
+created_at, updated_at
+ticket_assignees
+ticket_id fk
+user_id fk
+created_at
+(unique ticket_id + user_id)
+comments
+id uuid pk
+ticket_id fk
+author_type text (visitor|admin|system|agent)
+author_ref text
+body text
+telegram_message_id bigint nullable
+is_internal boolean default false
+created_at
+activities
+id uuid pk
+type text
+ticket_id fk nullable
+payload jsonb
+created_at
+Índices: tickets(status, queue), tickets(visitor_id), comments(ticket_id, created_at), activities(created_at), tickets(last_activity_at).
+
+Endpoints/API (exemplos)
+GET /api/tickets?status=&queue=&severity=&assignee=&q=
+GET /api/tickets/:id
+PATCH /api/tickets/:id (status/queue/severity/title/assignees)
+GET /api/tickets/:id/comments
+POST /api/tickets/:id/comments (nota interna)
+POST /api/tickets/:id/reply (envia Telegram + grava comment)
+GET /api/feed?...
+Auth endpoints (login/logout/me)
+UI/UX (mínimo aceitável)
+Layout 3 colunas (Kanban) + filtros no topo
+Feed em página separada
+Ticket detail com:
+painel lateral de metadados (status/queue/severity/assignees)
+thread no centro
+composer embaixo (tabs: Responder / Nota interna)
+Mostrar badge para S1 e para company pending_review
+Variáveis de ambiente (Replit Secrets)
+DATABASE_URL
+TELEGRAM_BOT_TOKEN
+JWT_SECRET (se auth local)
+APP_BASE_URL
+Entregáveis
+Projeto rodando no Replit com instruções claras no README:
+como setar secrets
+como rodar migrations
+como iniciar
+Migrations + seed opcional (criar 1 admin user)
+Kanban + Feed + Ticket Detail funcionando
+Envio de mensagem via Telegram funcionando (sendMessage)
+Controle de acesso por role
+Fora do escopo nesta fase (não implementar agora)
+Realtime websocket
+Enriquecimento de CNPJ via web (apenas schema e placeholder)
+Integração com OpenClaw (só preparar para futuro)
+Drag-and-drop obrigatório (pode ficar para depois)
+Construa primeiro o fluxo: listar tickets → abrir ticket → comentar → responder ao Telegram → ver no feed → alterar status/queue/assignees.
