@@ -96,8 +96,51 @@ app.use((req, res, next) => {
       host: "0.0.0.0",
       reusePort: true,
     },
-    () => {
+    async () => {
       log(`serving on port ${port}`);
+
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+      const replSlug = process.env.REPL_SLUG;
+      const replOwner = process.env.REPL_OWNER;
+      const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
+
+      if (botToken) {
+        let webhookUrl = "";
+        if (replitDevDomain) {
+          webhookUrl = `https://${replitDevDomain}/api/telegram/webhook`;
+        } else if (replSlug && replOwner) {
+          webhookUrl = `https://${replSlug}.${replOwner}.repl.co/api/telegram/webhook`;
+        }
+
+        if (webhookUrl) {
+          try {
+            const params: any = { url: webhookUrl };
+            if (webhookSecret) {
+              params.secret_token = webhookSecret;
+            }
+
+            const res = await fetch(
+              `https://api.telegram.org/bot${botToken}/setWebhook`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(params),
+              }
+            );
+            const data = await res.json() as any;
+            if (data.ok) {
+              log(`Telegram webhook registered: ${webhookUrl}`, "telegram");
+            } else {
+              log(`Telegram webhook registration failed: ${data.description}`, "telegram");
+            }
+          } catch (err: any) {
+            log(`Telegram webhook registration error: ${err.message}`, "telegram");
+          }
+        } else {
+          log("Telegram webhook: could not determine app URL", "telegram");
+        }
+      }
     },
   );
 })();

@@ -288,15 +288,37 @@ export async function registerRoutes(
 
   app.post("/api/telegram/webhook", async (req: Request, res: Response) => {
     try {
+      const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const token = req.headers["x-telegram-bot-api-secret-token"];
+        if (token !== webhookSecret) {
+          return res.status(403).json({ ok: false, error: "Invalid secret token" });
+        }
+      }
+
       const update = req.body;
       const message = update?.message;
-      if (!message || !message.text) {
+      if (!message) {
+        return res.json({ ok: true });
+      }
+
+      let text = message.text || "";
+      if (!text && message.caption) text = message.caption;
+      if (message.photo) text = text || "[Foto recebida]";
+      if (message.document) text = `[Documento: ${message.document.file_name || "arquivo"}] ${text}`.trim();
+      if (message.voice) text = text || "[Mensagem de voz]";
+      if (message.video) text = text || "[Vídeo recebido]";
+      if (message.audio) text = `[Áudio: ${message.audio.title || "sem título"}] ${text}`.trim();
+      if (message.sticker) text = `[Sticker: ${message.sticker.emoji || ""}]`;
+      if (message.location) text = `[Localização: ${message.location.latitude}, ${message.location.longitude}]`;
+      if (message.contact) text = `[Contato: ${message.contact.first_name} ${message.contact.phone_number}]`;
+
+      if (!text) {
         return res.json({ ok: true });
       }
 
       const telegramUserId = message.from?.id;
       const telegramChatId = message.chat?.id;
-      const text = message.text;
       const firstName = message.from?.first_name || "";
       const lastName = message.from?.last_name || "";
       const senderName = `${firstName} ${lastName}`.trim() || "Unknown";
