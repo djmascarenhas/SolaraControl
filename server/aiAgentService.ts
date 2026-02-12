@@ -3,10 +3,17 @@ import { storage } from "./storage";
 import type { AiAgent, Visitor } from "@shared/schema";
 import { log } from "./index";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let _openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "not-configured",
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return _openai;
+}
 
 export async function routeMessageToAgent(text: string): Promise<AiAgent | null> {
   const agents = await storage.getActiveAiAgents();
@@ -37,7 +44,7 @@ export async function routeMessageToAgent(text: string): Promise<AiAgent | null>
 
   const agentDescriptions = agents.map(a => `- "${a.slug}": ${a.description || a.name}`).join("\n");
   try {
-    const routingResponse = await openai.chat.completions.create({
+    const routingResponse = await getOpenAI().chat.completions.create({
       model: "gpt-5-nano",
       messages: [
         {
@@ -87,7 +94,7 @@ export async function getAgentResponse(
   messages.push({ role: "user", content: userMessage });
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: agent.model || "gpt-5.2",
       messages,
       max_completion_tokens: 2048,
