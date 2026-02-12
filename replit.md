@@ -6,6 +6,13 @@ SolaraControl is a web-based support ticket management system (MVP) designed for
 
 The app manages support tickets with statuses (inbox, needs_info, assigned, in_progress, waiting, review, done), categorized by queue (support/budget/logistics) and severity (S1/S2/S3). It tracks visitors (end-users who interact via Telegram), companies (B2B entities), and internal team members. Each ticket has a comment thread supporting both internal and external messages. Ticket IDs use the prefix "SOL-" (e.g., "SOL-000123").
 
+### AI Agents
+Two AI agents auto-reply to Telegram messages:
+- **Solara** — Specialist in solar photovoltaic energy, automations, and renewable energy systems
+- **BESS Architect** — Specialist in Battery Energy Storage Systems (BESS), dimensioning, and engineering
+
+Messages are routed to the correct agent using keyword matching (with GPT-based fallback routing). Each agent maintains conversation history per visitor for contextual responses. Agents are managed via the `/ai-agents` admin page (admin-only). Uses Replit AI Integrations (OpenAI-compatible) — no separate API key required.
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

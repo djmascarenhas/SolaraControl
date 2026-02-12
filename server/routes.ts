@@ -3,6 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { authMiddleware, requireRole, hashPassword, comparePassword, generateToken } from "./auth";
 import { z } from "zod";
+import { routeMessageToAgent, getAgentResponse } from "./aiAgentService";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -458,11 +459,88 @@ export async function registerRoutes(
         payload: { snippet: text.substring(0, 100), from: senderName },
       });
 
+      // AI Agent auto-reply
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (botToken && text && !text.startsWith("[")) {
+        try {
+          const agent = await routeMessageToAgent(text);
+          if (agent) {
+            const aiReply = await getAgentResponse(agent, visitor, text);
+
+            const tgRes = await fetch(
+              `https://api.telegram.org/bot${botToken}/sendMessage`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: telegramChatId, text: aiReply }),
+              }
+            );
+            const tgData = await tgRes.json() as any;
+
+            await storage.createComment({
+              ticket_id: ticket.id,
+              author_type: "system",
+              author_ref: agent.id,
+              body: `[${agent.name}] ${aiReply}`,
+              is_internal: false,
+              telegram_message_id: tgData.ok ? tgData.result.message_id : undefined,
+            });
+
+            await storage.createActivity({
+              type: "ai_agent_reply",
+              ticket_id: ticket.id,
+              payload: { agent_name: agent.name, snippet: aiReply.substring(0, 100) },
+            });
+          }
+        } catch (aiErr: any) {
+          console.error("AI agent reply error:", aiErr);
+        }
+      }
+
       return res.json({ ok: true });
     } catch (err: any) {
       console.error("Telegram webhook error:", err);
       return res.json({ ok: true });
     }
+  });
+
+  // ═══════════════════════════════════════════
+  // AI AGENTS (Admin)
+  // ═══════════════════════════════════════════
+
+  app.get("/api/ai-agents", authMiddleware, async (req: Request, res: Response) => {
+    const agents = await storage.getAllAiAgents();
+    return res.json(agents);
+  });
+
+  app.get("/api/ai-agents/:id", authMiddleware, async (req: Request, res: Response) => {
+    const agentId = req.params.id as string;
+    const agent = await storage.getAiAgent(agentId);
+    if (!agent) return res.status(404).json({ message: "Agent not found" });
+    return res.json(agent);
+  });
+
+  app.post("/api/ai-agents", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    const { name, slug, description, system_prompt, model, is_active, keywords } = req.body;
+    if (!name || !slug || !system_prompt) {
+      return res.status(400).json({ message: "name, slug, and system_prompt are required" });
+    }
+    const agent = await storage.createAiAgent({ name, slug, description, system_prompt, model: model || "gpt-5.2", is_active: is_active ?? true, keywords });
+    return res.status(201).json(agent);
+  });
+
+  app.patch("/api/ai-agents/:id", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    const agentId = req.params.id as string;
+    const agent = await storage.getAiAgent(agentId);
+    if (!agent) return res.status(404).json({ message: "Agent not found" });
+    const updated = await storage.updateAiAgent(agentId, req.body);
+    return res.json(updated);
+  });
+
+  app.delete("/api/ai-agents/:id", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    const agentId = req.params.id as string;
+    await storage.deleteAiAgent(agentId);
+    return res.json({ ok: true });
   });
 
   // ═══════════════════════════════════════════

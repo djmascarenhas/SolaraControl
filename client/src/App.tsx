@@ -11,6 +11,7 @@ import Feed from "@/pages/Feed";
 import TicketDetail from "@/pages/TicketDetail";
 import Admin from "@/pages/Admin";
 import SendMessage from "@/pages/SendMessage";
+import AiAgents from "@/pages/AiAgents";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -36,6 +37,7 @@ function ProtectedRouter() {
       <Route path="/feed" component={Feed} />
       <Route path="/ticket/:id" component={TicketDetail} />
       <Route path="/send-message" component={SendMessage} />
+      <Route path="/ai-agents" component={AiAgents} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>

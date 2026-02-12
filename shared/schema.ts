@@ -173,3 +173,37 @@ export const insertActivitySchema = createInsertSchema(activities).omit({
 });
 export type InsertActivity = z.infer<typeof insertActivitySchema>;
 export type Activity = typeof activities.$inferSelect;
+
+// ───── AI AGENTS ─────
+export const aiAgents = pgTable("ai_agents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  system_prompt: text("system_prompt").notNull(),
+  model: text("model").notNull().default("gpt-5.2"),
+  is_active: boolean("is_active").default(true).notNull(),
+  keywords: text("keywords").array(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertAiAgentSchema = createInsertSchema(aiAgents).omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+});
+export type InsertAiAgent = z.infer<typeof insertAiAgentSchema>;
+export type AiAgent = typeof aiAgents.$inferSelect;
+
+// ───── AI CONVERSATION HISTORY (per visitor per agent) ─────
+export const aiConversationHistory = pgTable("ai_conversation_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  visitor_id: varchar("visitor_id").notNull().references(() => visitors.id),
+  agent_id: varchar("agent_id").notNull().references(() => aiAgents.id),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("ai_conv_history_visitor_agent_idx").on(table.visitor_id, table.agent_id, table.created_at),
+]);

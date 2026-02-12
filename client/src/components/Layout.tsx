@@ -4,6 +4,7 @@ import {
   Activity, 
   Users,
   MessageSquare,
+  Bot,
   Search, 
   LogOut,
   Bell,
@@ -37,7 +38,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/", label: t("nav.inbox"), icon: LayoutDashboard },
     { href: "/feed", label: t("nav.feed"), icon: Activity },
     { href: "/send-message", label: t("nav.send_message"), icon: MessageSquare },
-    ...(user?.role === "admin" ? [{ href: "/admin", label: t("nav.team"), icon: Users }] : []),
+    ...(user?.role === "admin" ? [
+      { href: "/ai-agents", label: t("nav.ai_agents"), icon: Bot },
+      { href: "/admin", label: t("nav.team"), icon: Users },
+    ] : []),
   ];
 
   const currentTheme = THEME_CYCLE.find(tc => tc.current === theme) || THEME_CYCLE[0];

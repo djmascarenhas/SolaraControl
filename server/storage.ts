@@ -10,6 +10,8 @@ import {
   comments, type Comment, type InsertComment,
   activities, type Activity, type InsertActivity,
   sessions,
+  aiAgents, type AiAgent, type InsertAiAgent,
+  aiConversationHistory,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -71,6 +73,19 @@ export interface IStorage {
     offset?: number;
   }): Promise<Activity[]>;
   createActivity(activity: InsertActivity): Promise<Activity>;
+
+  // AI Agents
+  getAllAiAgents(): Promise<AiAgent[]>;
+  getAiAgent(id: string): Promise<AiAgent | undefined>;
+  getAiAgentBySlug(slug: string): Promise<AiAgent | undefined>;
+  getActiveAiAgents(): Promise<AiAgent[]>;
+  createAiAgent(agent: InsertAiAgent): Promise<AiAgent>;
+  updateAiAgent(id: string, data: Partial<AiAgent>): Promise<AiAgent | undefined>;
+  deleteAiAgent(id: string): Promise<void>;
+
+  // AI Conversation History
+  getConversationHistory(visitorId: string, agentId: string, limit?: number): Promise<{ role: string; content: string }[]>;
+  addConversationMessage(visitorId: string, agentId: string, role: string, content: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -317,6 +332,54 @@ export class DatabaseStorage implements IStorage {
   async createActivity(activity: InsertActivity): Promise<Activity> {
     const [created] = await db.insert(activities).values(activity).returning();
     return created;
+  }
+
+  // ── AI Agents ──
+  async getAllAiAgents(): Promise<AiAgent[]> {
+    return db.select().from(aiAgents).orderBy(aiAgents.name);
+  }
+
+  async getAiAgent(id: string): Promise<AiAgent | undefined> {
+    const [agent] = await db.select().from(aiAgents).where(eq(aiAgents.id, id));
+    return agent;
+  }
+
+  async getAiAgentBySlug(slug: string): Promise<AiAgent | undefined> {
+    const [agent] = await db.select().from(aiAgents).where(eq(aiAgents.slug, slug));
+    return agent;
+  }
+
+  async getActiveAiAgents(): Promise<AiAgent[]> {
+    return db.select().from(aiAgents).where(eq(aiAgents.is_active, true)).orderBy(aiAgents.name);
+  }
+
+  async createAiAgent(agent: InsertAiAgent): Promise<AiAgent> {
+    const [created] = await db.insert(aiAgents).values(agent).returning();
+    return created;
+  }
+
+  async updateAiAgent(id: string, data: Partial<AiAgent>): Promise<AiAgent | undefined> {
+    const [updated] = await db.update(aiAgents).set({ ...data, updated_at: new Date() }).where(eq(aiAgents.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAiAgent(id: string): Promise<void> {
+    await db.delete(aiConversationHistory).where(eq(aiConversationHistory.agent_id, id));
+    await db.delete(aiAgents).where(eq(aiAgents.id, id));
+  }
+
+  // ── AI Conversation History ──
+  async getConversationHistory(visitorId: string, agentId: string, limit = 20): Promise<{ role: string; content: string }[]> {
+    const rows = await db.select({ role: aiConversationHistory.role, content: aiConversationHistory.content })
+      .from(aiConversationHistory)
+      .where(and(eq(aiConversationHistory.visitor_id, visitorId), eq(aiConversationHistory.agent_id, agentId)))
+      .orderBy(desc(aiConversationHistory.created_at))
+      .limit(limit);
+    return rows.reverse();
+  }
+
+  async addConversationMessage(visitorId: string, agentId: string, role: string, content: string): Promise<void> {
+    await db.insert(aiConversationHistory).values({ visitor_id: visitorId, agent_id: agentId, role, content });
   }
 }
 
