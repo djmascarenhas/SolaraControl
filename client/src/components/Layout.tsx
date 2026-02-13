@@ -5,6 +5,7 @@ import {
   Users,
   MessageSquare,
   Bot,
+  BarChart3,
   Search, 
   LogOut,
   Bell,
@@ -39,6 +40,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/feed", label: t("nav.feed"), icon: Activity },
     { href: "/send-message", label: t("nav.send_message"), icon: MessageSquare },
     ...(user?.role === "admin" ? [
+      { href: "/dashboard", label: t("nav.dashboard"), icon: BarChart3 },
       { href: "/ai-agents", label: t("nav.ai_agents"), icon: Bot },
       { href: "/admin", label: t("nav.team"), icon: Users },
     ] : []),

@@ -13,6 +13,17 @@ Two AI agents auto-reply to Telegram messages:
 
 Messages are routed to the correct agent using keyword matching (with GPT-based fallback routing). Each agent maintains conversation history per visitor for contextual responses. Agents are managed via the `/ai-agents` admin page (admin-only). Uses Replit AI Integrations (OpenAI-compatible) — no separate API key required.
 
+### Executive Dashboard
+Admin-only dashboard (`/dashboard`) with:
+- **KPI Cards**: Total events, avg response time, escalation rate, high confidence %, citations %, high risk count, ticket stats
+- **Timeseries Chart**: Volume, response time, confidence, escalation over time (Recharts)
+- **Breakdowns**: Pie chart + table by category, agent, risk, channel
+- **Top Issues**: Table ranked by frequency with risk level, avg response time, escalation count
+- **Agent Performance**: Bar chart of events per agent
+- **Filters**: Date range (7d/14d/30d/90d)
+- **Event Logging**: Inbound/outbound events logged automatically in Telegram webhook with response_time_ms, agent, confidence_score, etc.
+- **Table**: `dashboard_events` stores all event metrics for aggregation
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

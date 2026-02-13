@@ -1,0 +1,43 @@
+Você é um engenheiro full-stack sênior. Sua missão é implementar um “Dashboard Executivo” para uma plataforma de atendimento de energia solar (Kuaray System).
+
+Contexto:
+- App já existe no Replit.
+- Existem agentes (Kuaray, Solara, Bess Architect, etc.). As interações devem ser registradas e agregadas.
+- Precisamos de painéis: Operação, Técnico, Comercial, Risco, Performance.
+- Dashboard deve ser protegido por login e role admin.
+- Banco: Postgres (usar o que o projeto já usa; se não existir, criar com Prisma ou SQL direto).
+- Frontend: Next.js + Tailwind + shadcn/ui (se o projeto já usa outra stack, manter a stack atual e adaptar).
+- Gráficos: Recharts (ou alternativa já presente no projeto).
+
+Requisitos funcionais:
+1) Criar tabelas para logging (events) e agregação (tickets) e métricas derivadas:
+   - events: message_id, conversation_id, user_id, timestamp, channel, agent_routed_to, risk_level, category, response_time_ms, confidence_score, has_citations, outcome_status, feedback_score (nullable), tenant_id (default 1)
+   - tickets: ticket_id, conversation_id, opened_at, closed_at (nullable), category, risk_level, status, resolution_time_ms (nullable), escalated_to (nullable), agent_owner (nullable), tenant_id
+2) Criar endpoints API:
+   - GET /api/dashboard/overview (KPIs gerais)
+   - GET /api/dashboard/timeseries?metric=...&range=... (linha do tempo)
+   - GET /api/dashboard/breakdowns?by=category|risk|agent|channel (distribuições)
+   - GET /api/dashboard/top-issues (top falhas/temas)
+3) Criar UI /dashboard (admin):
+   - Cards KPIs: volume tickets, TMR, taxa escalonamento, SLA, % alta confiança, % com fonte
+   - Gráfico timeseries (volume, SLA, tempo de resposta)
+   - Tabelas: top issues, top agents por performance, incidentes críticos
+   - Filtros: data range, categoria, risco, agente, canal, tenant
+4) Instrumentar logs:
+   - Sempre que o app receber mensagem do usuário, registrar event “inbound”
+   - Sempre que responder, registrar event “outbound” com response_time_ms, agent_routed_to, etc.
+5) Segurança:
+   - Autenticação + role admin.
+   - Não exibir PII sensível no dashboard (mascarar user_id se necessário).
+6) Entregar:
+   - Código completo
+   - Instruções de configuração (env vars)
+   - Script de migração
+   - Seed de dados falso para testar dashboard
+
+Comece validando a stack atual do repositório e então implemente de forma incremental:
+- Passo 1: schema + migrations
+- Passo 2: logging básico
+- Passo 3: endpoints agregados
+- Passo 4: UI com filtros e gráficos
+- Passo 5: hardening e seed

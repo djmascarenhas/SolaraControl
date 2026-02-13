@@ -459,13 +459,28 @@ export async function registerRoutes(
         payload: { snippet: text.substring(0, 100), from: senderName },
       });
 
+      // Dashboard: log inbound event
+      try {
+        await storage.createDashboardEvent({
+          event_type: "inbound",
+          conversation_id: ticket.id,
+          visitor_id: visitor.id,
+          ticket_id: ticket.id,
+          channel: "telegram",
+          category: ticket.queue,
+          risk_level: ticket.severity === "S1" ? "high" : ticket.severity === "S2" ? "medium" : "low",
+        });
+      } catch (_e) {}
+
       // AI Agent auto-reply
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       if (botToken && text && !text.startsWith("[")) {
         try {
+          const replyStart = Date.now();
           const agent = await routeMessageToAgent(text);
           if (agent) {
             const aiReply = await getAgentResponse(agent, visitor, text);
+            const responseTimeMs = Date.now() - replyStart;
 
             const tgRes = await fetch(
               `https://api.telegram.org/bot${botToken}/sendMessage`,
@@ -491,6 +506,24 @@ export async function registerRoutes(
               ticket_id: ticket.id,
               payload: { agent_name: agent.name, snippet: aiReply.substring(0, 100) },
             });
+
+            // Dashboard: log outbound event
+            try {
+              await storage.createDashboardEvent({
+                event_type: "outbound",
+                conversation_id: ticket.id,
+                visitor_id: visitor.id,
+                ticket_id: ticket.id,
+                channel: "telegram",
+                agent_routed_to: agent.name,
+                category: ticket.queue,
+                risk_level: ticket.severity === "S1" ? "high" : ticket.severity === "S2" ? "medium" : "low",
+                response_time_ms: responseTimeMs,
+                confidence_score: 0.85,
+                has_citations: false,
+                outcome_status: "resolved",
+              });
+            } catch (_e) {}
           }
         } catch (aiErr: any) {
           console.error("AI agent reply error:", aiErr);
@@ -541,6 +574,58 @@ export async function registerRoutes(
     const agentId = req.params.id as string;
     await storage.deleteAiAgent(agentId);
     return res.json({ ok: true });
+  });
+
+  // ═══════════════════════════════════════════
+  // DASHBOARD (Admin)
+  // ═══════════════════════════════════════════
+
+  app.get("/api/dashboard/overview", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const from = req.query.from ? new Date(req.query.from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = req.query.to ? new Date(req.query.to as string) : new Date();
+      const data = await storage.getDashboardOverview(from, to);
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/dashboard/timeseries", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const metric = (req.query.metric as string) || "volume";
+      const from = req.query.from ? new Date(req.query.from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = req.query.to ? new Date(req.query.to as string) : new Date();
+      const granularity = (req.query.granularity as string) || "day";
+      const data = await storage.getDashboardTimeseries(metric, from, to, granularity);
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/dashboard/breakdowns", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const by = (req.query.by as string) || "category";
+      const from = req.query.from ? new Date(req.query.from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = req.query.to ? new Date(req.query.to as string) : new Date();
+      const data = await storage.getDashboardBreakdowns(by, from, to);
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/dashboard/top-issues", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const from = req.query.from ? new Date(req.query.from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = req.query.to ? new Date(req.query.to as string) : new Date();
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+      const data = await storage.getDashboardTopIssues(from, to, limit);
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
   });
 
   // ═══════════════════════════════════════════

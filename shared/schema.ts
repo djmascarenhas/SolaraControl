@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, timestamp, bigint, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean, timestamp, bigint, jsonb, uniqueIndex, index, integer, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -207,3 +207,34 @@ export const aiConversationHistory = pgTable("ai_conversation_history", {
 }, (table) => [
   index("ai_conv_history_visitor_agent_idx").on(table.visitor_id, table.agent_id, table.created_at),
 ]);
+
+// ───── DASHBOARD EVENTS ─────
+export const dashboardEvents = pgTable("dashboard_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  event_type: text("event_type").notNull(),
+  conversation_id: varchar("conversation_id"),
+  visitor_id: varchar("visitor_id"),
+  ticket_id: varchar("ticket_id"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  channel: text("channel").notNull().default("telegram"),
+  agent_routed_to: text("agent_routed_to"),
+  risk_level: text("risk_level"),
+  category: text("category"),
+  response_time_ms: integer("response_time_ms"),
+  confidence_score: real("confidence_score"),
+  has_citations: boolean("has_citations").default(false),
+  outcome_status: text("outcome_status"),
+  feedback_score: integer("feedback_score"),
+  tenant_id: integer("tenant_id").default(1).notNull(),
+}, (table) => [
+  index("dashboard_events_timestamp_idx").on(table.timestamp),
+  index("dashboard_events_type_idx").on(table.event_type),
+  index("dashboard_events_agent_idx").on(table.agent_routed_to),
+  index("dashboard_events_category_idx").on(table.category),
+]);
+
+export const insertDashboardEventSchema = createInsertSchema(dashboardEvents).omit({
+  id: true,
+});
+export type InsertDashboardEvent = z.infer<typeof insertDashboardEventSchema>;
+export type DashboardEvent = typeof dashboardEvents.$inferSelect;

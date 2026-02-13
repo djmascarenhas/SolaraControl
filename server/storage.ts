@@ -12,6 +12,7 @@ import {
   sessions,
   aiAgents, type AiAgent, type InsertAiAgent,
   aiConversationHistory,
+  dashboardEvents, type DashboardEvent, type InsertDashboardEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -86,6 +87,13 @@ export interface IStorage {
   // AI Conversation History
   getConversationHistory(visitorId: string, agentId: string, limit?: number): Promise<{ role: string; content: string }[]>;
   addConversationMessage(visitorId: string, agentId: string, role: string, content: string): Promise<void>;
+
+  // Dashboard Events
+  createDashboardEvent(event: InsertDashboardEvent): Promise<DashboardEvent>;
+  getDashboardOverview(from: Date, to: Date): Promise<any>;
+  getDashboardTimeseries(metric: string, from: Date, to: Date, granularity: string): Promise<any[]>;
+  getDashboardBreakdowns(by: string, from: Date, to: Date): Promise<any[]>;
+  getDashboardTopIssues(from: Date, to: Date, limit: number): Promise<any[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -380,6 +388,143 @@ export class DatabaseStorage implements IStorage {
 
   async addConversationMessage(visitorId: string, agentId: string, role: string, content: string): Promise<void> {
     await db.insert(aiConversationHistory).values({ visitor_id: visitorId, agent_id: agentId, role, content });
+  }
+
+  // ── Dashboard Events ──
+  async createDashboardEvent(event: InsertDashboardEvent): Promise<DashboardEvent> {
+    const [created] = await db.insert(dashboardEvents).values(event).returning();
+    return created;
+  }
+
+  async getDashboardOverview(from: Date, to: Date): Promise<any> {
+    const dateFilter = and(
+      sql`${dashboardEvents.timestamp} >= ${from}`,
+      sql`${dashboardEvents.timestamp} <= ${to}`
+    );
+
+    const [totals] = await db.select({
+      total_events: sql<number>`count(*)::int`,
+      total_inbound: sql<number>`count(*) filter (where ${dashboardEvents.event_type} = 'inbound')::int`,
+      total_outbound: sql<number>`count(*) filter (where ${dashboardEvents.event_type} = 'outbound')::int`,
+      avg_response_time: sql<number>`coalesce(avg(${dashboardEvents.response_time_ms}) filter (where ${dashboardEvents.event_type} = 'outbound'), 0)::int`,
+      avg_confidence: sql<number>`coalesce(avg(${dashboardEvents.confidence_score}) filter (where ${dashboardEvents.event_type} = 'outbound'), 0)::float`,
+      high_confidence_pct: sql<number>`coalesce(100.0 * count(*) filter (where ${dashboardEvents.confidence_score} >= 0.8 and ${dashboardEvents.event_type} = 'outbound') / nullif(count(*) filter (where ${dashboardEvents.event_type} = 'outbound'), 0), 0)::float`,
+      with_citations_pct: sql<number>`coalesce(100.0 * count(*) filter (where ${dashboardEvents.has_citations} = true and ${dashboardEvents.event_type} = 'outbound') / nullif(count(*) filter (where ${dashboardEvents.event_type} = 'outbound'), 0), 0)::float`,
+      escalation_rate: sql<number>`coalesce(100.0 * count(*) filter (where ${dashboardEvents.outcome_status} = 'escalated') / nullif(count(*) filter (where ${dashboardEvents.event_type} = 'outbound'), 0), 0)::float`,
+      risk_high_count: sql<number>`count(*) filter (where ${dashboardEvents.risk_level} = 'high')::int`,
+    }).from(dashboardEvents).where(dateFilter!);
+
+    const [ticketStats] = await db.select({
+      total_tickets: sql<number>`count(*)::int`,
+      open_tickets: sql<number>`count(*) filter (where ${tickets.status} != 'done')::int`,
+      done_tickets: sql<number>`count(*) filter (where ${tickets.status} = 'done')::int`,
+    }).from(tickets);
+
+    return { ...totals, ...ticketStats };
+  }
+
+  async getDashboardTimeseries(metric: string, from: Date, to: Date, granularity: string): Promise<any[]> {
+    const dateFilter = and(
+      sql`${dashboardEvents.timestamp} >= ${from}`,
+      sql`${dashboardEvents.timestamp} <= ${to}`
+    );
+
+    const truncFn = granularity === "hour"
+      ? sql`date_trunc('hour', ${dashboardEvents.timestamp})`
+      : sql`date_trunc('day', ${dashboardEvents.timestamp})`;
+
+    let valueSql;
+    switch (metric) {
+      case "volume":
+        valueSql = sql<number>`count(*)::int`;
+        break;
+      case "response_time":
+        valueSql = sql<number>`coalesce(avg(${dashboardEvents.response_time_ms}), 0)::int`;
+        break;
+      case "confidence":
+        valueSql = sql<number>`coalesce(avg(${dashboardEvents.confidence_score}), 0)::float`;
+        break;
+      case "escalation":
+        valueSql = sql<number>`coalesce(100.0 * count(*) filter (where ${dashboardEvents.outcome_status} = 'escalated') / nullif(count(*), 0), 0)::float`;
+        break;
+      default:
+        valueSql = sql<number>`count(*)::int`;
+    }
+
+    const rows = await db.select({
+      period: truncFn.as("period"),
+      value: valueSql.as("value"),
+    })
+      .from(dashboardEvents)
+      .where(dateFilter!)
+      .groupBy(sql`period`)
+      .orderBy(sql`period`);
+
+    return rows.map((r: any) => ({ period: r.period, value: r.value }));
+  }
+
+  async getDashboardBreakdowns(by: string, from: Date, to: Date): Promise<any[]> {
+    const dateFilter = and(
+      sql`${dashboardEvents.timestamp} >= ${from}`,
+      sql`${dashboardEvents.timestamp} <= ${to}`
+    );
+
+    let groupCol;
+    switch (by) {
+      case "agent":
+        groupCol = dashboardEvents.agent_routed_to;
+        break;
+      case "risk":
+        groupCol = dashboardEvents.risk_level;
+        break;
+      case "channel":
+        groupCol = dashboardEvents.channel;
+        break;
+      case "category":
+      default:
+        groupCol = dashboardEvents.category;
+    }
+
+    const rows = await db.select({
+      label: groupCol,
+      count: sql<number>`count(*)::int`,
+      avg_response_time: sql<number>`coalesce(avg(${dashboardEvents.response_time_ms}), 0)::int`,
+      avg_confidence: sql<number>`coalesce(avg(${dashboardEvents.confidence_score}), 0)::float`,
+    })
+      .from(dashboardEvents)
+      .where(dateFilter!)
+      .groupBy(groupCol)
+      .orderBy(sql`count(*) desc`);
+
+    return rows.map((r: any) => ({ label: r.label || "N/A", count: r.count, avg_response_time: r.avg_response_time, avg_confidence: r.avg_confidence }));
+  }
+
+  async getDashboardTopIssues(from: Date, to: Date, limit = 10): Promise<any[]> {
+    const dateFilter = and(
+      sql`${dashboardEvents.timestamp} >= ${from}`,
+      sql`${dashboardEvents.timestamp} <= ${to}`
+    );
+
+    const rows = await db.select({
+      category: dashboardEvents.category,
+      risk_level: dashboardEvents.risk_level,
+      count: sql<number>`count(*)::int`,
+      avg_response_time: sql<number>`coalesce(avg(${dashboardEvents.response_time_ms}), 0)::int`,
+      escalation_count: sql<number>`count(*) filter (where ${dashboardEvents.outcome_status} = 'escalated')::int`,
+    })
+      .from(dashboardEvents)
+      .where(dateFilter!)
+      .groupBy(dashboardEvents.category, dashboardEvents.risk_level)
+      .orderBy(sql`count(*) desc`)
+      .limit(limit);
+
+    return rows.map((r: any) => ({
+      category: r.category || "N/A",
+      risk_level: r.risk_level || "N/A",
+      count: r.count,
+      avg_response_time: r.avg_response_time,
+      escalation_count: r.escalation_count,
+    }));
   }
 }
 
