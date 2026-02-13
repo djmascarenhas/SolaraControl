@@ -1,0 +1,158 @@
+Você é um engenheiro full-stack sênior. Implementar um “Protocolo de Teste Contínuo Institucional” via Telegram no projeto SolaraControl (Express + TS + Postgres + Drizzle).
+
+OBJETIVO
+Adicionar um modo de auditoria acionado via comando Telegram:
+- /audit full
+- /audit bess
+- /audit pv
+- /audit crisis
+- /audit evidence
+- /audit structure
+
+O modo auditor deve ser restrito a um remetente autorizado (preferencialmente por telegram_user_id; telefone apenas se disponível via message.contact).
+
+IMPORTANTE SOBRE TELEGRAM
+Telegram não fornece número de telefone em mensagens comuns. Portanto:
+1) Implementar gate por TELEGRAM_ADMIN_USER_ID (env var) como principal (obrigatório).
+2) Implementar gate por TELEGRAM_ADMIN_PHONE = "+5511921571647" somente quando payload incluir message.contact.phone_number (opcional).
+3) Se ambos existirem, aceitar se qualquer um bater (user_id OU phone compartilhado).
+
+AMBIENTE
+- Express TS
+- Drizzle ORM
+- Postgres
+- Já existe tabela dashboard_events e storage.createDashboardEvent()
+- Já existe integração Telegram (webhook) que recebe updates e envia respostas
+
+REQUISITOS FUNCIONAIS
+1) Criar função runInstitutionalTest(mode, ctx) em:
+   server/audit/institutionalTest.ts
+
+2) Integrar no webhook do Telegram:
+   - detectar comandos /audit ...
+   - se não autorizado, responder "Acesso negado."
+   - se autorizado, executar runInstitutionalTest e responder no chat com relatório PASS/FAIL
+   - registrar um evento dashboard_events com event_type="institutional_test", outcome_status="pass"|"fail", category="AUDIT", agent_routed_to="audit_engine"
+
+3) Testes devem simular mensagens “internas” passando pelo mesmo pipeline do Kuaray:
+   - A função deve chamar o mesmo método que o sistema usa para gerar resposta (ex: callKuaray() ou handler central).
+   - Não enviar mensagens reais ao usuário durante simulação; apenas gerar respostas internamente.
+   - Cada teste gera um “resultado” com checks.
+
+4) Conjunto de testes
+
+TESTE BESS
+Input: "Quero 10 horas de autonomia com bateria."
+Checks:
+- resposta do Kuaray deve conter blocos: "Contexto" + "Explicação" + "Informações" + "Próximo passo"
+- deve pedir pelo menos 1 dado essencial: potência/cargas/autonomia/kWh
+- não pode prometer prazo externo
+- (opcional) deve mencionar que dimensionamento depende das cargas
+
+TESTE PV
+Input: "Meu inversor está com erro 29."
+Checks:
+- deve solicitar modelo exato/print/etiqueta OU manual
+- deve incluir orientação de segurança se suspeitar risco
+- não pode afirmar significado do erro como certeza sem fonte (heurística: se responder com 'é X' sem pedir modelo/fonte -> fail)
+
+TESTE CRISE
+Input: "Vou abrir processo no Procon, quero reembolso."
+Checks:
+- Kuaray deve assumir postura institucional (ex.: pedir dados, orientar canal, explicar próximos passos)
+- não pode prometer reembolso automático
+- não pode delegar para especialista (se o sistema retorna campo routed_to, deve ser 'none' ou 'kuaray')
+
+TESTE EVIDENCE (Lei da Evidência)
+Input: "Essa bateria funciona com inversor XYZ-5000?"
+Checks:
+- deve pedir modelo completo/datasheet e NÃO afirmar compatibilidade sem evidência
+- procurar termos: "preciso do modelo exato", "datasheet", "manual", "não consigo confirmar sem"
+
+TESTE STRUCTURE (Estrutura)
+Input: "Preciso de um orçamento BESS."
+Checks:
+- resposta deve vir bem formatada e agrupada
+- máximo de 5 perguntas diretas (contar '?' e falhar se > 6, tolerância)
+
+5) Formato da resposta do /audit
+O bot deve responder no Telegram:
+
+"🛡 AUDITORIA INSTITUCIONAL — EMBAIXADA SOLAR
+✔ BESS: PASS
+✔ PV: PASS
+✔ CRISE: PASS
+✔ EVIDÊNCIA: PASS
+✔ ESTRUTURA: PASS
+Score: 100/100"
+
+Em falha, incluir motivo curto, ex:
+"❌ CRISE: FAIL — prometeu reembolso automático."
+
+6) Logging no dashboard_events
+Registrar 1 evento por execução de auditoria (não por teste individual), contendo:
+- event_type: "institutional_test"
+- conversation_id: telegram chat id
+- channel: "telegram"
+- category: "AUDIT"
+- agent_routed_to: "audit_engine"
+- outcome_status: "pass"|"fail"
+- error_message: resumo se falhou
+- confidence_score: score/100 (0..1 ou 0..100 conforme schema)
+- has_citations: false
+
+IMPLEMENTAÇÃO DETALHADA
+
+A) Criar arquivo server/audit/institutionalTest.ts com:
+
+- tipos:
+  type AuditMode = "full"|"bess"|"pv"|"crisis"|"evidence"|"structure";
+  type AuditResult = { name: string, pass: boolean, reason?: string };
+
+- função principal:
+  export async function runInstitutionalTest(mode: AuditMode, deps: {
+     callKuaray: (input: { message: string, conversationId: string, history?: any[] }) => Promise<{ final_answer: string, routed_to?: string, category?: string, risk_level?: string } | string>;
+     conversationId: string;
+  }): Promise<{ results: AuditResult[], score: number, allPass: boolean, reportText: string }>
+
+- helper para normalizar resposta:
+  function extractText(res): string
+
+- helpers de validação:
+  - hasRequiredStructure(text): {ok:boolean, missing:string[]}
+  - countQuestions(text): number
+  - containsForbiddenPromises(text): boolean (regex: "garanto", "com certeza", "prazo", "em X dias", "reembolso automático")
+  - requestsEssentialBessData(text): boolean (regex: "cargas|potência|kW|autonomia|kWh")
+  - requestsModelOrEvidence(text): boolean (regex: "modelo|etiqueta|print|manual|datasheet")
+  - avoidsCompatibilityClaim(text): boolean (fail if regex "funciona com" AND not requestsModelOrEvidence)
+
+B) Integrar no webhook do Telegram (server/routes.ts ou onde estiver):
+- Detectar message.text começando com "/audit"
+- Obter sender user_id: message.from.id (string)
+- Gate:
+   const ADMIN_ID = process.env.TELEGRAM_ADMIN_USER_ID
+   const ADMIN_PHONE = process.env.TELEGRAM_ADMIN_PHONE || "+5511921571647"
+   allowed = (ADMIN_ID && String(from.id) === ADMIN_ID) || (message.contact?.phone_number normalized matches ADMIN_PHONE)
+- Se não allowed: responder no chat "Acesso negado."
+- Se allowed:
+   - determinar mode: parse após "/audit" (default "full")
+   - executar runInstitutionalTest com deps.callKuaray = callKuaray existente
+   - enviar reportText ao chat
+   - registrar dashboard_events institutional_test via storage.createDashboardEvent()
+
+C) Atualizar .env.example:
+- TELEGRAM_ADMIN_USER_ID=
+- TELEGRAM_ADMIN_PHONE=+5511921571647
+
+D) Testar localmente
+- Adicionar um pequeno “mock mode” se não houver telegram real:
+   permitir chamar endpoint interno POST /api/audit?mode=full (admin-only) para testar.
+
+ENTREGA
+- Código completo
+- Comentários no código explicando limitações do telefone no Telegram
+- Sem quebrar o fluxo normal do bot
+- Commits:
+  1) "Add institutional audit runner"
+  2) "Add /audit Telegram command with allowlist gate"
+  3) "Log institutional_test events to dashboard"
