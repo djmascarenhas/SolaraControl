@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
@@ -11,7 +12,9 @@ import {
   Bell,
   Sun,
   Moon,
-  Droplets
+  Droplets,
+  Menu,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -34,6 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { lang, setLang, t } = useI18n();
   const { theme, setTheme } = useTheme();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
     { href: "/", label: t("nav.inbox"), icon: LayoutDashboard },
@@ -49,61 +53,100 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const currentTheme = THEME_CYCLE.find(tc => tc.current === theme) || THEME_CYCLE[0];
   const ThemeIcon = currentTheme.icon;
 
-  return (
-    <div className="flex h-screen w-full bg-background overflow-hidden">
-      <aside className="w-52 border-r border-sidebar-border bg-sidebar flex flex-col shrink-0">
-        <div className="p-4 border-b border-sidebar-border">
-          <h1 className="font-mono font-bold text-sm tracking-tight flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse" />
-            SolaraControl
-          </h1>
-        </div>
+  const sidebarContent = (
+    <>
+      <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
+        <h1 className="font-mono font-bold text-sm tracking-tight flex items-center gap-2">
+          <div className="w-2.5 h-2.5 bg-primary rounded-full animate-pulse" />
+          SolaraControl
+        </h1>
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="md:hidden w-8 h-8 flex items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors"
+          data-testid="button-close-sidebar"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location === item.href;
-            return (
-              <Link key={item.href} href={item.href}>
-                <div className={cn(
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location === item.href;
+          return (
+            <Link key={item.href} href={item.href}>
+              <div
+                onClick={() => setSidebarOpen(false)}
+                className={cn(
                   "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer",
                   isActive 
                     ? "bg-sidebar-primary/10 text-sidebar-primary" 
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                )}>
-                  <Icon className="w-4 h-4" />
-                  {item.label}
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {item.label}
+              </div>
+            </Link>
+          );
+        })}
+      </nav>
 
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-              {user?.name?.charAt(0) || "?"}
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate capitalize">{user?.role}</p>
-            </div>
+      <div className="p-4 border-t border-sidebar-border">
+        <div className="flex items-center gap-3 mb-4 px-2">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+            {user?.name?.charAt(0) || "?"}
           </div>
-          <button 
-            onClick={logout}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="button-logout"
-          >
-            <LogOut className="w-3 h-3" />
-            {t("nav.signout")}
-          </button>
+          <div className="flex-1 overflow-hidden">
+            <p className="text-sm font-medium truncate">{user?.name}</p>
+            <p className="text-xs text-muted-foreground truncate capitalize">{user?.role}</p>
+          </div>
         </div>
+        <button 
+          onClick={logout}
+          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="button-logout"
+        >
+          <LogOut className="w-3 h-3" />
+          {t("nav.signout")}
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-screen w-full bg-background overflow-hidden">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside className="hidden md:flex w-52 border-r border-sidebar-border bg-sidebar flex-col shrink-0">
+        {sidebarContent}
+      </aside>
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-200 md:hidden",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {sidebarContent}
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-background">
-        <header className="h-14 border-b px-6 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4 w-full max-w-md">
-            <div className="relative w-full">
+        <header className="h-14 border-b px-3 md:px-6 flex items-center justify-between shrink-0 gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden w-9 h-9 flex items-center justify-center rounded-md hover:bg-muted/80 transition-colors shrink-0"
+              data-testid="button-open-sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input 
                 type="text" 
@@ -113,7 +156,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               />
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -150,7 +193,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <TooltipContent side="bottom"><p>English</p></TooltipContent>
             </Tooltip>
 
-            <div className="w-px h-5 bg-border mx-1" />
+            <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -165,7 +208,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <TooltipContent side="bottom"><p>{currentTheme.label}</p></TooltipContent>
             </Tooltip>
 
-            <div className="w-px h-5 bg-border mx-1" />
+            <div className="w-px h-5 bg-border mx-1 hidden sm:block" />
 
             <button className="relative text-muted-foreground hover:text-foreground transition-colors w-8 h-8 flex items-center justify-center">
               <Bell className="w-4 h-4" />

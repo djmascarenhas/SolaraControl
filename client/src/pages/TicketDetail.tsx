@@ -179,9 +179,9 @@ export default function TicketDetail() {
     <Layout>
       <div className="h-full flex flex-col md:flex-row bg-background">
         
-        <div className="flex-1 flex flex-col min-w-0 border-r border-border/50">
-          <div className="h-16 border-b border-border/50 flex items-center justify-between px-6 bg-background shrink-0">
-            <div className="min-w-0 flex items-center gap-4">
+        <div className="flex-1 flex flex-col min-w-0 md:border-r border-border/50">
+          <div className="h-14 sm:h-16 border-b border-border/50 flex items-center justify-between px-3 sm:px-6 bg-background shrink-0">
+            <div className="min-w-0 flex items-center gap-2 sm:gap-4">
               <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
                 <ArrowLeft className="w-4 h-4" />
               </Link>
@@ -203,7 +203,7 @@ export default function TicketDetail() {
             </Badge>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 bg-muted/5 dark:bg-background/50 space-y-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-muted/5 dark:bg-background/50 space-y-4 sm:space-y-6">
              <div className="flex gap-4 max-w-3xl">
                 <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
                   <User className="w-4 h-4 text-muted-foreground" />
@@ -315,8 +315,8 @@ export default function TicketDetail() {
           )}
         </div>
 
-        <div className="w-80 border-l border-border bg-muted/10 shrink-0 overflow-y-auto">
-          <div className="p-6 space-y-8">
+        <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-border bg-muted/10 shrink-0 overflow-y-auto">
+          <div className="p-3 sm:p-6 space-y-6 sm:space-y-8">
             
             <div className="space-y-4">
               <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("ticket.properties")}</h3>
