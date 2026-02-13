@@ -5,6 +5,7 @@ import { authMiddleware, requireRole, hashPassword, comparePassword, generateTok
 import { z } from "zod";
 import { routeMessageToAgent, getAgentResponse } from "./aiAgentService";
 import { callKuaray, getConversationHistoryForKuaray } from "./ai/kuaray";
+import { runInstitutionalTest, type AuditMode } from "./audit/institutionalTest";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -413,6 +414,84 @@ export async function registerRoutes(
 
       const conversationId = String(telegramChatId);
 
+      // ── /audit command handler ──
+      // Telegram does not provide phone numbers in regular messages.
+      // Primary gate: TELEGRAM_ADMIN_USER_ID (env var, required).
+      // Secondary gate: TELEGRAM_ADMIN_PHONE, only when message.contact is present (optional).
+      if (typeof text === "string" && /^\/audit(\s|$)/i.test(text)) {
+        const ADMIN_ID = process.env.TELEGRAM_ADMIN_USER_ID;
+        const ADMIN_PHONE = process.env.TELEGRAM_ADMIN_PHONE;
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+
+        const normalizePhone = (p: string) => p.replace(/[\s\-()]/g, "");
+        // Telegram only provides phone in message.contact when user explicitly shares contact
+        const contactPhone = message.contact?.phone_number
+          ? normalizePhone(String(message.contact.phone_number))
+          : null;
+
+        const allowedById = ADMIN_ID && String(telegramUserId) === ADMIN_ID;
+        const allowedByPhone = ADMIN_PHONE && contactPhone && normalizePhone(ADMIN_PHONE) === contactPhone;
+        const allowed = allowedById || allowedByPhone;
+
+        if (!allowed) {
+          if (botToken) {
+            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: telegramChatId, text: "Acesso negado." }),
+            });
+          }
+          return res.json({ ok: true });
+        }
+
+        const parts = text.trim().split(/\s+/);
+        const modeArg = (parts[1] || "full").toLowerCase();
+        const validModes: AuditMode[] = ["full", "bess", "pv", "crisis", "evidence", "structure"];
+        const mode: AuditMode = validModes.includes(modeArg as AuditMode) ? (modeArg as AuditMode) : "full";
+
+        if (botToken) {
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: telegramChatId, text: `⏳ Executando auditoria (modo: ${mode})... Aguarde.` }),
+          });
+        }
+
+        const report = await runInstitutionalTest(mode, {
+          callKuaray: (input) => callKuaray({
+            message: input.message,
+            conversationId: input.conversationId,
+            history: input.history,
+          }),
+          conversationId,
+        });
+
+        if (botToken) {
+          await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: telegramChatId, text: report.reportText }),
+          });
+        }
+
+        try {
+          const failedNames = report.results.filter(r => !r.pass).map(r => `${r.name}: ${r.reason}`);
+          await storage.createDashboardEvent({
+            event_type: "institutional_test",
+            conversation_id: conversationId,
+            channel: "telegram",
+            category: "AUDIT",
+            agent_routed_to: "audit_engine",
+            outcome_status: report.allPass ? "pass" : "fail",
+            confidence_score: report.score / 100,
+            has_citations: false,
+            risk_level: report.allPass ? "low" : "medium",
+          });
+        } catch (_e) {}
+
+        return res.json({ ok: true });
+      }
+
       let visitor = await storage.getVisitorByTelegramId(telegramUserId);
       if (!visitor) {
         visitor = await storage.createVisitor({
@@ -677,6 +756,51 @@ export async function registerRoutes(
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
       const data = await storage.getDashboardTopIssues(from, to, limit);
       return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════
+  // AUDIT (Admin — internal test endpoint)
+  // ═══════════════════════════════════════════
+
+  app.post("/api/audit", authMiddleware, requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const modeArg = (req.query.mode as string || "full").toLowerCase();
+      const validModes: AuditMode[] = ["full", "bess", "pv", "crisis", "evidence", "structure"];
+      const mode: AuditMode = validModes.includes(modeArg as AuditMode) ? (modeArg as AuditMode) : "full";
+
+      const report = await runInstitutionalTest(mode, {
+        callKuaray: (input) => callKuaray({
+          message: input.message,
+          conversationId: input.conversationId,
+          history: input.history,
+        }),
+        conversationId: `api-audit-${Date.now()}`,
+      });
+
+      try {
+        await storage.createDashboardEvent({
+          event_type: "institutional_test",
+          conversation_id: `api-audit`,
+          channel: "api",
+          category: "AUDIT",
+          agent_routed_to: "audit_engine",
+          outcome_status: report.allPass ? "pass" : "fail",
+          confidence_score: report.score / 100,
+          has_citations: false,
+          risk_level: report.allPass ? "low" : "medium",
+        });
+      } catch (_e) {}
+
+      return res.json({
+        mode,
+        score: report.score,
+        allPass: report.allPass,
+        results: report.results,
+        reportText: report.reportText,
+      });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

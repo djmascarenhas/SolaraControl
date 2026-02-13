@@ -24,6 +24,15 @@ AI-powered auto-reply system with centralized orchestration:
 
 Agents are managed via the `/ai-agents` admin page (admin-only). Uses Replit AI Integrations (OpenAI-compatible) — no separate API key required.
 
+### Institutional Audit Protocol
+Telegram command `/audit` (admin-only) for continuous quality testing of AI agents:
+- **Commands**: `/audit full`, `/audit bess`, `/audit pv`, `/audit crisis`, `/audit evidence`, `/audit structure`
+- **Gate**: Restricted by `TELEGRAM_ADMIN_USER_ID` (primary) and `TELEGRAM_ADMIN_PHONE` (optional, contact only)
+- **Tests**: BESS (structure/data requests), PV (model/evidence requests), Crise (institutional posture), Evidência (no claims without proof), Estrutura (formatting/question count)
+- **API**: `POST /api/audit?mode=full` (admin-only) for testing without Telegram
+- **Logging**: Events stored in `dashboard_events` with `event_type="institutional_test"`
+- **Module**: `server/audit/institutionalTest.ts`
+
 ### Executive Dashboard
 Admin-only dashboard (`/dashboard`) with:
 - **KPI Cards**: Total events, avg response time, escalation rate, high confidence %, citations %, high risk count, ticket stats
