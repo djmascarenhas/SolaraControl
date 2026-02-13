@@ -101,16 +101,20 @@ app.use((req, res, next) => {
 
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-      const replSlug = process.env.REPL_SLUG;
-      const replOwner = process.env.REPL_OWNER;
+      const replitDomains = process.env.REPLIT_DOMAINS;
       const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
+      const isDeployment = process.env.REPLIT_DEPLOYMENT === "1";
 
       if (botToken) {
         let webhookUrl = "";
-        if (replitDevDomain) {
+        if (isDeployment && replitDomains) {
+          const primaryDomain = replitDomains.split(",")[0].trim();
+          webhookUrl = `https://${primaryDomain}/api/telegram/webhook`;
+        } else if (replitDevDomain) {
           webhookUrl = `https://${replitDevDomain}/api/telegram/webhook`;
-        } else if (replSlug && replOwner) {
-          webhookUrl = `https://${replSlug}.${replOwner}.repl.co/api/telegram/webhook`;
+        } else if (replitDomains) {
+          const primaryDomain = replitDomains.split(",")[0].trim();
+          webhookUrl = `https://${primaryDomain}/api/telegram/webhook`;
         }
 
         if (webhookUrl) {
