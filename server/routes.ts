@@ -565,6 +565,12 @@ export async function registerRoutes(
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       if (botToken && text && !text.startsWith("[")) {
         try {
+          await fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: telegramChatId, action: "typing" }),
+          }).catch(() => {});
+
           const replyStart = Date.now();
 
           const history = await getConversationHistoryForKuaray(visitor.id);
