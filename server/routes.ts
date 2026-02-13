@@ -418,7 +418,11 @@ export async function registerRoutes(
       // Telegram does not provide phone numbers in regular messages.
       // Primary gate: TELEGRAM_ADMIN_USER_ID (env var, required).
       // Secondary gate: TELEGRAM_ADMIN_PHONE, only when message.contact is present (optional).
-      if (typeof text === "string" && /^\/audit(\s|$)/i.test(text)) {
+      const isAuditTrigger = typeof text === "string" && (
+        /^\/audit(\s|$)/i.test(text) ||
+        /teste\s+os\s+agentes\s+da\s+embaixada/i.test(text)
+      );
+      if (isAuditTrigger) {
         const ADMIN_ID = process.env.TELEGRAM_ADMIN_USER_ID;
         const ADMIN_PHONE = process.env.TELEGRAM_ADMIN_PHONE;
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -444,10 +448,13 @@ export async function registerRoutes(
           return res.json({ ok: true });
         }
 
-        const parts = text.trim().split(/\s+/);
-        const modeArg = (parts[1] || "full").toLowerCase();
         const validModes: AuditMode[] = ["full", "bess", "pv", "crisis", "evidence", "structure"];
-        const mode: AuditMode = validModes.includes(modeArg as AuditMode) ? (modeArg as AuditMode) : "full";
+        let mode: AuditMode = "full";
+        if (/^\/audit(\s|$)/i.test(text!)) {
+          const parts = text!.trim().split(/\s+/);
+          const modeArg = (parts[1] || "full").toLowerCase();
+          mode = validModes.includes(modeArg as AuditMode) ? (modeArg as AuditMode) : "full";
+        }
 
         if (botToken) {
           await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
