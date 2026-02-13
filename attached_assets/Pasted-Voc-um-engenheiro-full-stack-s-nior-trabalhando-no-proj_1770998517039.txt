@@ -1,0 +1,182 @@
+Você é um engenheiro full-stack sênior trabalhando no projeto SolaraControl (Express + TypeScript + Postgres + Drizzle + Vite React).
+
+MISSÃO
+Implementar:
+
+1) Correção de conversation_id (usar Telegram chat id real).
+2) Novo evento "router_decision" em dashboard_events.
+3) Integrar GPT Kuaray como orquestrador central de todos os agentes.
+4) Preparar arquitetura para múltiplos agentes (Solara, Bess Architect, etc).
+5) Garantir logging estruturado para o Dashboard Executivo.
+
+==============================
+PARTE 1 — conversation_id correto
+==============================
+
+No webhook do Telegram:
+
+- Capturar chat id real:
+  const conversationId = String(message.chat.id);
+
+- Em TODOS os dashboard_events:
+  - conversation_id = conversationId
+  - ticket_id = ticket.id (quando existir)
+
+Não usar mais ticket.id como conversation_id.
+
+==============================
+PARTE 2 — router_decision event
+==============================
+
+Após classificar intenção e escolher agente:
+
+Criar evento:
+{
+  event_type: "router_decision",
+  conversation_id: conversationId,
+  ticket_id: ticket.id,
+  visitor_id: visitor.id,
+  channel: "telegram",
+  category: detectedCategory,
+  risk_level: detectedRisk,
+  agent_routed_to: agentSlug,
+  response_time_ms: null,
+  confidence_score: null,
+  has_citations: false,
+  outcome_status: "routed"
+}
+
+Se event_type for ENUM no banco, atualizar migration.
+
+==============================
+PARTE 3 — INTEGRAR GPT KUARAY COMO ORQUESTRADOR
+==============================
+
+Criar módulo: server/ai/kuaray.ts
+
+Função principal:
+
+async function callKuaray(payload: {
+  message: string,
+  conversationId: string,
+  visitorId?: number,
+  ticketId?: number,
+  history?: Array<{role: "user"|"assistant", content: string}>
+})
+
+Implementar chamada para OpenAI (Chat Completions API ou Assistants API).
+
+Usar variável de ambiente:
+OPENAI_API_KEY
+KUARAY_MODEL (ex: gpt-4o ou gpt-4.1)
+
+Payload enviado ao GPT deve incluir:
+- Mensagem do usuário
+- Categoria detectada
+- Risco detectado
+- Contexto do ticket (se existir)
+- Histórico resumido (últimas 5 mensagens)
+
+==============================
+PARTE 4 — ROTEAMENTO CENTRALIZADO
+==============================
+
+No webhook:
+
+ANTES:
+- routeMessageToAgent(text)
+
+DEPOIS:
+- classificar intenção localmente (leve)
+- enviar tudo para callKuaray()
+
+O GPT Kuaray deve decidir:
+- resposta direta
+OU
+- encaminhar para especialista (Solara, Bess Architect)
+
+Implementar campo na resposta do GPT:
+{
+  final_answer: string,
+  routed_to: "solara" | "bess_architect" | "none",
+  risk_level: "low|medium|high|critical",
+  category: "SUPORTE_PV|BESS|..."
+}
+
+Se routed_to !== "none":
+- registrar router_decision
+- opcionalmente chamar função especializada no futuro
+- por enquanto, resposta final do Kuaray é usada
+
+==============================
+PARTE 5 — LOGGING COMPLETO
+==============================
+
+Para cada mensagem Telegram:
+
+1) inbound event
+2) router_decision event
+3) outbound event
+
+Outbound deve incluir:
+- response_time_ms
+- confidence_score (temporariamente null ou heurística simples)
+- has_citations (detectar "Fonte:" no texto)
+
+==============================
+PARTE 6 — ESTRUTURA ESCALÁVEL PARA MULTI-AGENTES
+==============================
+
+Criar arquivo:
+server/ai/agents.ts
+
+const AGENTS = {
+  kuaray: { role: "orchestrator" },
+  solara: { role: "pv_support" },
+  bess_architect: { role: "bess_specialist" }
+}
+
+Não implementar chamada real aos subagentes ainda.
+Apenas estruturar para futura expansão.
+
+==============================
+PARTE 7 — SEGURANÇA
+==============================
+
+- Não logar mensagens completas no console em produção.
+- Mascarar dados sensíveis.
+- Tratar erros do OpenAI com fallback seguro.
+
+==============================
+PARTE 8 — TESTES
+==============================
+
+Testar fluxo completo:
+
+Mensagem Telegram →
+inbound log →
+callKuaray →
+router_decision log →
+outbound log →
+resposta enviada
+
+Garantir que:
+- conversation_id = chat id
+- ticket_id permanece correto
+- router_decision está sendo salvo
+- Dashboard continua funcionando
+
+==============================
+ENTREGA
+==============================
+
+1) Commit:
+   - "Fix conversation_id to use chat id"
+   - "Add router_decision event"
+   - "Integrate GPT Kuaray as orchestrator"
+
+2) Atualizar .env.example com:
+   OPENAI_API_KEY=
+   KUARAY_MODEL=
+
+3) Garantir que app roda local sem erro.

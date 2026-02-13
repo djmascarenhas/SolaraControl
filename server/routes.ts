@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { authMiddleware, requireRole, hashPassword, comparePassword, generateToken } from "./auth";
 import { z } from "zod";
 import { routeMessageToAgent, getAgentResponse } from "./aiAgentService";
+import { callKuaray, getConversationHistoryForKuaray } from "./ai/kuaray";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -410,6 +411,8 @@ export async function registerRoutes(
         return res.json({ ok: true });
       }
 
+      const conversationId = String(telegramChatId);
+
       let visitor = await storage.getVisitorByTelegramId(telegramUserId);
       if (!visitor) {
         visitor = await storage.createVisitor({
@@ -459,11 +462,11 @@ export async function registerRoutes(
         payload: { snippet: text.substring(0, 100), from: senderName },
       });
 
-      // Dashboard: log inbound event
+      // EVENT 1: inbound
       try {
         await storage.createDashboardEvent({
           event_type: "inbound",
-          conversation_id: ticket.id,
+          conversation_id: conversationId,
           visitor_id: visitor.id,
           ticket_id: ticket.id,
           channel: "telegram",
@@ -472,67 +475,118 @@ export async function registerRoutes(
         });
       } catch (_e) {}
 
-      // AI Agent auto-reply
+      // AI Agent auto-reply via Kuaray orchestrator
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       if (botToken && text && !text.startsWith("[")) {
         try {
           const replyStart = Date.now();
-          const agent = await routeMessageToAgent(text);
-          if (agent) {
-            const aiReply = await getAgentResponse(agent, visitor, text);
-            const responseTimeMs = Date.now() - replyStart;
 
-            const tgRes = await fetch(
-              `https://api.telegram.org/bot${botToken}/sendMessage`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: telegramChatId, text: aiReply }),
-              }
-            );
-            const tgData = await tgRes.json() as any;
+          const history = await getConversationHistoryForKuaray(visitor.id);
 
-            await storage.createComment({
+          const kuarayResult = await callKuaray({
+            message: text,
+            conversationId,
+            visitorId: visitor.id,
+            ticketId: ticket.id,
+            ticketQueue: ticket.queue,
+            ticketSeverity: ticket.severity,
+            visitorName: visitor.name || undefined,
+            history,
+          });
+
+          const responseTimeMs = Date.now() - replyStart;
+          const agentSlug = kuarayResult.routed_to || "none";
+          const detectedCategory = kuarayResult.category || "GERAL";
+          const detectedRisk = kuarayResult.risk_level || "low";
+
+          // EVENT 2: router_decision
+          try {
+            await storage.createDashboardEvent({
+              event_type: "router_decision",
+              conversation_id: conversationId,
               ticket_id: ticket.id,
-              author_type: "system",
-              author_ref: agent.id,
-              body: `[${agent.name}] ${aiReply}`,
-              is_internal: false,
-              telegram_message_id: tgData.ok ? tgData.result.message_id : undefined,
+              visitor_id: visitor.id,
+              channel: "telegram",
+              category: detectedCategory,
+              risk_level: detectedRisk,
+              agent_routed_to: agentSlug,
+              response_time_ms: null,
+              confidence_score: kuarayResult.confidence_score,
+              has_citations: false,
+              outcome_status: "routed",
             });
+          } catch (_e) {}
 
-            await storage.createActivity({
-              type: "ai_agent_reply",
+          const finalAnswer = kuarayResult.final_answer;
+          const hasCitations = /Fonte:|Referência:|Ref\.|Source:/i.test(finalAnswer);
+
+          const tgRes = await fetch(
+            `https://api.telegram.org/bot${botToken}/sendMessage`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: telegramChatId, text: finalAnswer }),
+            }
+          );
+          const tgData = await tgRes.json() as any;
+
+          const agentLabel = agentSlug !== "none" ? agentSlug : "kuaray";
+
+          // Save conversation history for the routed agent (or first active agent)
+          try {
+            const agents = await storage.getActiveAiAgents();
+            const matchedAgent = agents.find(a => a.slug === agentSlug) || agents[0];
+            if (matchedAgent) {
+              await storage.addConversationMessage(visitor.id, matchedAgent.id, "user", text);
+              await storage.addConversationMessage(visitor.id, matchedAgent.id, "assistant", finalAnswer);
+            }
+          } catch (_e) {}
+
+          await storage.createComment({
+            ticket_id: ticket.id,
+            author_type: "system",
+            author_ref: agentLabel,
+            body: `[${agentLabel}] ${finalAnswer}`,
+            is_internal: false,
+            telegram_message_id: tgData.ok ? tgData.result.message_id : undefined,
+          });
+
+          await storage.createActivity({
+            type: "ai_agent_reply",
+            ticket_id: ticket.id,
+            payload: { agent_name: agentLabel, snippet: finalAnswer.substring(0, 100), routed_to: agentSlug, category: detectedCategory },
+          });
+
+          // EVENT 3: outbound
+          try {
+            await storage.createDashboardEvent({
+              event_type: "outbound",
+              conversation_id: conversationId,
+              visitor_id: visitor.id,
               ticket_id: ticket.id,
-              payload: { agent_name: agent.name, snippet: aiReply.substring(0, 100) },
+              channel: "telegram",
+              agent_routed_to: agentLabel,
+              category: detectedCategory,
+              risk_level: detectedRisk,
+              response_time_ms: responseTimeMs,
+              confidence_score: kuarayResult.confidence_score,
+              has_citations: hasCitations,
+              outcome_status: "resolved",
             });
+          } catch (_e) {}
 
-            // Dashboard: log outbound event
-            try {
-              await storage.createDashboardEvent({
-                event_type: "outbound",
-                conversation_id: ticket.id,
-                visitor_id: visitor.id,
-                ticket_id: ticket.id,
-                channel: "telegram",
-                agent_routed_to: agent.name,
-                category: ticket.queue,
-                risk_level: ticket.severity === "S1" ? "high" : ticket.severity === "S2" ? "medium" : "low",
-                response_time_ms: responseTimeMs,
-                confidence_score: 0.85,
-                has_citations: false,
-                outcome_status: "resolved",
-              });
-            } catch (_e) {}
-          }
         } catch (aiErr: any) {
-          console.error("AI agent reply error:", aiErr);
+          if (process.env.NODE_ENV !== "production") {
+            console.error("AI orchestrator error:", aiErr.message);
+          }
         }
       }
 
       return res.json({ ok: true });
     } catch (err: any) {
-      console.error("Telegram webhook error:", err);
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Telegram webhook error:", err.message);
+      }
       return res.json({ ok: true });
     }
   });

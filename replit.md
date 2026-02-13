@@ -6,12 +6,23 @@ SolaraControl is a web-based support ticket management system (MVP) designed for
 
 The app manages support tickets with statuses (inbox, needs_info, assigned, in_progress, waiting, review, done), categorized by queue (support/budget/logistics) and severity (S1/S2/S3). It tracks visitors (end-users who interact via Telegram), companies (B2B entities), and internal team members. Each ticket has a comment thread supporting both internal and external messages. Ticket IDs use the prefix "SOL-" (e.g., "SOL-000123").
 
-### AI Agents
-Two AI agents auto-reply to Telegram messages:
+### AI Agents & Kuaray Orchestrator
+AI-powered auto-reply system with centralized orchestration:
+
+- **Kuaray** (Orchestrator) — Central GPT-based router that analyzes intent, classifies category/risk, and decides routing. Uses `server/ai/kuaray.ts`.
 - **Solara** — Specialist in solar photovoltaic energy, automations, and renewable energy systems
 - **BESS Architect** — Specialist in Battery Energy Storage Systems (BESS), dimensioning, and engineering
 
-Messages are routed to the correct agent using keyword matching (with GPT-based fallback routing). Each agent maintains conversation history per visitor for contextual responses. Agents are managed via the `/ai-agents` admin page (admin-only). Uses Replit AI Integrations (OpenAI-compatible) — no separate API key required.
+**Architecture**: All Telegram messages go through Kuaray first. Kuaray classifies the message (category, risk_level) and decides whether to respond directly or route to a specialist. The multi-agent registry is in `server/ai/agents.ts`. Legacy keyword-based routing in `server/aiAgentService.ts` remains available as fallback.
+
+**Event Flow** (per Telegram message):
+1. `inbound` event — logged when message arrives
+2. `router_decision` event — logged after Kuaray classifies and routes
+3. `outbound` event — logged when response is sent back
+
+**conversation_id**: Uses Telegram chat ID (not ticket ID) for accurate conversation tracking.
+
+Agents are managed via the `/ai-agents` admin page (admin-only). Uses Replit AI Integrations (OpenAI-compatible) — no separate API key required.
 
 ### Executive Dashboard
 Admin-only dashboard (`/dashboard`) with:
@@ -90,6 +101,10 @@ server/           — Express backend
   seed.ts         — Database seeding script
   vite.ts         — Vite dev server integration
   static.ts       — Production static file serving
+  aiAgentService.ts — Legacy keyword-based agent routing (fallback)
+  ai/
+    kuaray.ts     — GPT Kuaray orchestrator (central router)
+    agents.ts     — Multi-agent registry and definitions
 shared/           — Shared code between client and server
   schema.ts       — Drizzle ORM schema definitions + Zod schemas
 migrations/       — Drizzle migration output directory
