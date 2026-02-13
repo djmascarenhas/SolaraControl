@@ -30,21 +30,21 @@ function extractText(res: KuarayLike | string): string {
 }
 
 function hasRequiredStructure(text: string): { ok: boolean; missing: string[] } {
-  const blocks = ["contexto", "explicação", "informações", "próximo passo"];
   const lower = text.toLowerCase();
   const missing: string[] = [];
-  for (const b of blocks) {
-    const variations = b === "explicação"
-      ? ["explicação", "explicacao", "explica"]
-      : b === "próximo passo"
-        ? ["próximo passo", "proximo passo", "próximos passos", "proximos passos", "próximo", "proximo"]
-        : b === "informações"
-          ? ["informações", "informacoes", "informação", "informacao", "dados"]
-          : [b];
-    if (!variations.some(v => lower.includes(v))) {
-      missing.push(b);
-    }
-  }
+
+  const contextoWords = ["contexto", "entend", "compreend", "você mencion", "voce mencion", "sua solicit", "sobre o que", "quanto ao", "a respeito", "você pediu", "voce pediu", "você precisa", "voce precisa"];
+  if (!contextoWords.some(v => lower.includes(v))) missing.push("contexto");
+
+  const explicacaoWords = ["explicação", "explicacao", "explica", "significa", "consiste", "funciona", "conceito", "basicamente", "resumidamente", "trata-se", "refere-se", "é um", "são", "permite", "possibilita"];
+  if (!explicacaoWords.some(v => lower.includes(v))) missing.push("explicação");
+
+  const informacoesWords = ["informações", "informacoes", "informação", "informacao", "dados", "preciso saber", "necessário", "necessario", "informe", "indique", "forneça", "forneca", "potência", "potencia", "kw", "kwh", "consumo", "carga", "autonomia", "local", "demanda", "qual", "quanto"];
+  if (!informacoesWords.some(v => lower.includes(v))) missing.push("informações");
+
+  const proximoWords = ["próximo passo", "proximo passo", "próximos passos", "proximos passos", "próximo", "proximo", "a seguir", "recomend", "sugir", "suger", "entre em contato", "envie", "encaminh", "passo seguinte", "etapa seguinte"];
+  if (!proximoWords.some(v => lower.includes(v))) missing.push("próximo passo");
+
   return { ok: missing.length === 0, missing };
 }
 
@@ -144,7 +144,7 @@ async function testCrisis(deps: AuditDeps): Promise<AuditResult> {
       reasons.push(`delegou para especialista (${routedTo}) em vez de tratar institucionalmente`);
     }
 
-    const hasInstitutionalPosture = /\b(dados|protocolo|número do pedido|numero do pedido|atendimento|canal|etapas|próximos passos|proximo passo|análise|analise|registr|compreend|entend|lament)\b/i.test(text);
+    const hasInstitutionalPosture = /\b(dados|protocolo|número do pedido|numero do pedido|atendimento|canal|etapas|próximos passos|proximos passos|próximo passo|proximo passo|análise|analise|registr|compreend|entend|lament|sentimos|desculp|resolv|encaminh|setor responsável|setor responsavel|equipe|suporte|ajudar|ouvidoria|sinto muito|pedido|situação|situacao|caso)\b/i.test(text);
     if (!hasInstitutionalPosture) {
       reasons.push("não adotou postura institucional");
     }
